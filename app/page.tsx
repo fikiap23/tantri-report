@@ -390,7 +390,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${baseUrl}/v3/report/sale/summary?startDate=${startDate}&endDate=${endDate}`, {
+      const response = await fetch(`${baseUrl}/v2/report/sale/summary?startDate=${startDate}&endDate=${endDate}`, {
         headers: {
           "Content-Type": "application/json",
           ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
