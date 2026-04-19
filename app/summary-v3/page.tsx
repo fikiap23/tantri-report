@@ -18,17 +18,14 @@ import { Label } from '@/components/ui/label'
 import { ReportViewToggle } from '@/components/report-view-toggle'
 import { cn } from '@/lib/utils'
 import {
-  type ApiResponse,
-  type ExpandableMetricRow,
   type SummaryData,
-  REPORT_BASE_URL,
   REPORT_BEARER_TOKEN,
-  computeBaseMetrics,
-  createRows,
+  calculateReportV2,
+  fetchSaleSummaryRange,
   formatCurrency,
   formatDateForInput,
   formatNumber,
-} from '@/lib/report-summary'
+} from '@/lib/report-calculations'
 
 const accent = 'text-[#c62828]'
 const accentBg = 'bg-[#c62828] hover:bg-[#b71c1c]'
@@ -362,364 +359,9 @@ export default function SummaryV3Page() {
   const [error, setError] = useState('')
   const [data, setData] = useState<SummaryData | null>(null)
 
-  const sections = useMemo(() => (data ? createRows(data) : null), [data])
-  const metrics = useMemo(
-    () => (data ? computeBaseMetrics(data) : null),
+  const report = useMemo(
+    () => (data ? calculateReportV2(data) : null),
     [data],
-  )
-
-  const salesExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.salesRows.map((row) => {
-            if (row.label === 'Total Pesanan') {
-              return {
-                ...row,
-                key: 'total-order',
-                details: [
-                  {
-                    label: 'Pesanan General',
-                    value: formatNumber(data.sales.orderGeneralCount || 0),
-                  },
-                  {
-                    label: 'Pesanan Split Bill',
-                    value: formatNumber(data.sales.orderSplitBillCount || 0),
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Total Produk Terjual') {
-              return {
-                ...row,
-                key: 'total-product-sold',
-                details: [
-                  {
-                    label: 'Harga Normal',
-                    value: formatCurrency(
-                      data.sales.productNormalSoldTotal || 0,
-                    ),
-                  },
-                  {
-                    label: 'Harga Custom Amount',
-                    value: formatCurrency(
-                      data.sales.productCustomAmountSoldTotal || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            return { ...row, key: row.label }
-          })
-        : [],
-    [data, sections],
-  )
-
-  const cityLedgerExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.cityLedgerRows.map((row) => {
-            if (row.label === 'Total Pesanan') {
-              return {
-                ...row,
-                key: 'city-ledger-total-order',
-                details: [
-                  {
-                    label: 'Pesanan General',
-                    value: formatNumber(data.cityLedger.orderGeneralCount || 0),
-                  },
-                  {
-                    label: 'Pesanan Split Bill',
-                    value: formatNumber(
-                      data.cityLedger.orderSplitBillCount || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Total Produk Terjual') {
-              return {
-                ...row,
-                key: 'city-ledger-total-product-sold',
-                details: [
-                  {
-                    label: 'Harga Normal',
-                    value: formatCurrency(
-                      data.cityLedger.productNormalSoldTotal || 0,
-                    ),
-                  },
-                  {
-                    label: 'Harga Custom Amount',
-                    value: formatCurrency(
-                      data.cityLedger.productCustomAmountSoldTotal || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            return { ...row, key: `city-ledger-${row.label}` }
-          })
-        : [],
-    [data, sections],
-  )
-
-  const onlineFoodExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.onlineFoodRows.map((row) => {
-            if (row.label === 'Total Pesanan') {
-              return {
-                ...row,
-                key: 'of-total-order',
-                details: [
-                  {
-                    label: 'Pesanan General',
-                    value: formatNumber(data.onlineFood.orderGeneralCount || 0),
-                  },
-                  {
-                    label: 'Pesanan Split Bill',
-                    value: formatNumber(
-                      data.onlineFood.orderSplitBillCount || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Total Produk Terjual') {
-              return {
-                ...row,
-                key: 'of-total-product-sold',
-                details: [
-                  {
-                    label: 'Harga Normal',
-                    value: formatCurrency(
-                      data.onlineFood.productNormalSoldTotal || 0,
-                    ),
-                  },
-                  {
-                    label: 'Harga Custom Amount',
-                    value: formatCurrency(
-                      data.onlineFood.productCustomAmountSoldTotal || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            return { ...row, key: `of-${row.label}` }
-          })
-        : [],
-    [data, sections],
-  )
-
-  const complimentExpandableRows = useMemo<ExpandableMetricRow[]>(() => {
-    if (!data) return []
-    const c = data.compliment
-    return [
-      {
-        label: 'Jumlah Item Terjual',
-        value: formatNumber(c.productSoldCount || 0),
-        key: 'cmp-items',
-      },
-      {
-        label: 'Jumlah Transaksi',
-        value: `${formatNumber(c.orderCount || 0)} Pesanan`,
-        key: 'cmp-orders',
-        details: [
-          {
-            label: 'Pesanan General',
-            value: formatNumber(c.orderGeneralCount || 0),
-          },
-          {
-            label: 'Pesanan Split Bill',
-            value: formatNumber(c.orderSplitBillCount || 0),
-          },
-        ],
-      },
-      {
-        label: 'Total Penjualan Produk',
-        value: formatCurrency(c.productSoldTotal || 0),
-        key: 'cmp-product',
-        details: [
-          {
-            label: 'Harga Normal',
-            value: formatCurrency(c.productNormalSoldTotal || 0),
-          },
-          {
-            label: 'Harga Custom Amount',
-            value: formatCurrency(c.productCustomAmountSoldTotal || 0),
-          },
-        ],
-      },
-      {
-        label: 'Platform Fee',
-        value: formatCurrency(c.platformFee || 0),
-        key: 'cmp-pf',
-      },
-    ]
-  }, [data])
-
-  const revenueExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.revenueRows.map((row) => {
-            if (row.label === 'Platform Fee') {
-              const platformFeeMap = new Map<number, number>()
-              const allPlatformFeeBreakdowns = [
-                ...data.platformFeeBreakdown.sales,
-                ...data.platformFeeBreakdown.onlineFood,
-                ...data.platformFeeBreakdown.cityLedger,
-              ]
-              for (const item of allPlatformFeeBreakdowns) {
-                platformFeeMap.set(
-                  item.price,
-                  (platformFeeMap.get(item.price) || 0) + (item.count || 0),
-                )
-              }
-              const details = [...platformFeeMap.entries()]
-                .sort((a, b) => a[0] - b[0])
-                .map(([price, count]) => ({
-                  label: `${formatNumber(price)} x ${formatNumber(count)} Transaksi`,
-                  value: formatCurrency(price * count, true),
-                  negative: true,
-                }))
-              if (data.platformFeeBreakdown.compliment) {
-                details.push({
-                  label: 'Compliment',
-                  value: formatCurrency(
-                    data.platformFeeBreakdown.compliment,
-                    true,
-                  ),
-                  negative: true,
-                })
-              }
-              return { ...row, key: 'revenue-platform-fee', details }
-            }
-            if (row.label === 'Multiprice Fee') {
-              return {
-                ...row,
-                key: 'revenue-multiprice',
-                details: [
-                  {
-                    label: 'Penjualan',
-                    value: formatCurrency(data.sales.multipriceFee || 0, true),
-                    negative: true,
-                  },
-                  {
-                    label: 'Online Food',
-                    value: formatCurrency(
-                      data.onlineFood.multipriceFee || 0,
-                      true,
-                    ),
-                    negative: true,
-                  },
-                  {
-                    label: 'City Ledger',
-                    value: formatCurrency(
-                      data.cityLedger.multipriceFee || 0,
-                      true,
-                    ),
-                    negative: true,
-                  },
-                  {
-                    label: 'Compliment',
-                    value: formatCurrency(
-                      data.compliment.multipriceFee || 0,
-                      true,
-                    ),
-                    negative: true,
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Xendit Fee') {
-              return {
-                ...row,
-                key: 'revenue-xendit-fee',
-                details: [
-                  {
-                    label: 'E-Wallet x 0 Transaksi',
-                    value: formatCurrency(0, true),
-                    negative: true,
-                  },
-                  {
-                    label: 'QRIS x 0 Transaksi',
-                    value: formatCurrency(0, true),
-                    negative: true,
-                  },
-                  {
-                    label: 'VA x 0 Transaksi',
-                    value: formatCurrency(0, true),
-                    negative: true,
-                  },
-                ],
-              }
-            }
-            return { ...row, key: `revenue-${row.label}` }
-          })
-        : [],
-    [data, sections],
-  )
-
-  const walletIncomeExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.walletIncomeRows.map((row) => {
-            if (row.label === 'Tunai') {
-              return {
-                ...row,
-                key: 'wallet-income-cash',
-                details: [
-                  { label: 'Pemasukan Manual', value: formatCurrency(0) },
-                  {
-                    label: 'Pemasukan Penjualan',
-                    value: formatCurrency(data.walletIncome.cashAmount || 0),
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Online Food') {
-              return {
-                ...row,
-                key: 'wallet-income-of',
-                details: [
-                  {
-                    label: 'Akumulasi Online Food',
-                    value: formatCurrency(
-                      data.walletIncome.onlineFoodAmount || 0,
-                    ),
-                  },
-                ],
-              }
-            }
-            if (row.label === 'Deposit') {
-              const depositCount = data.walletIncome.depositCount || 0
-              return {
-                ...row,
-                key: 'wallet-income-deposit',
-                details: [
-                  {
-                    label: `Tunai x ${formatNumber(depositCount)} Transaksi`,
-                    value: formatCurrency(data.walletIncome.depositAmount || 0),
-                  },
-                  {
-                    label: 'Non Tunai x 0 Transaksi',
-                    value: formatCurrency(0),
-                  },
-                  { label: 'Debit x 0 Transaksi', value: formatCurrency(0) },
-                  {
-                    label: 'QRIS Static x 0 Transaksi',
-                    value: formatCurrency(0),
-                  },
-                  {
-                    label: 'Transfer Manual x 0 Transaksi',
-                    value: formatCurrency(0),
-                  },
-                ],
-              }
-            }
-            return { ...row, key: `wallet-income-${row.label}` }
-          })
-        : [],
-    [data, sections],
   )
 
   const [expandedSales, setExpandedSales] = useState<Record<string, boolean>>(
@@ -740,22 +382,8 @@ export default function SummaryV3Page() {
     setLoading(true)
     setError('')
     try {
-      const response = await fetch(
-        `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${endDate}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            ...(REPORT_BEARER_TOKEN
-              ? { Authorization: `Bearer ${REPORT_BEARER_TOKEN}` }
-              : {}),
-          },
-        },
-      )
-      const json = (await response.json()) as ApiResponse
-      if (!json?.isSuccess || !json?.data) {
-        throw new Error('Gagal mengambil data report.')
-      }
-      setData(json.data)
+      const summary = await fetchSaleSummaryRange(startDate, endDate)
+      setData(summary)
     } catch (err) {
       setData(null)
       setError(
@@ -917,39 +545,39 @@ export default function SummaryV3Page() {
           </Alert>
         )}
 
-        {data && metrics && sections && (
+        {data && report && (
           <>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <KpiCard
                 title="Margin Bisnis"
-                value={formatCurrency(metrics.totalNetRevenue)}
+                value={formatCurrency(report.metrics.totalNetRevenue)}
               />
               <KpiCard
                 title="Pendapatan Kotor"
-                value={formatCurrency(metrics.grossRevenue)}
+                value={formatCurrency(report.metrics.grossRevenue)}
               />
               <KpiCard
                 title="Penjualan Kotor"
-                value={formatCurrency(metrics.grossSales)}
+                value={formatCurrency(report.metrics.grossSales)}
               />
               <KpiCard
                 title="Pemasukan Dompet"
-                value={formatCurrency(metrics.totalWalletIncome)}
+                value={formatCurrency(report.metrics.totalWalletIncome)}
               />
               <KpiCard
                 title="Pengeluaran Dompet"
-                value={formatCurrency(metrics.totalWalletExpense)}
+                value={formatCurrency(report.metrics.totalWalletExpense)}
               />
               <KpiCard
                 title="Rata-Rata Penjualan"
-                value={`${formatCurrency(metrics.avgAmountPerBill)} / Bill`}
+                value={`${formatCurrency(report.metrics.avgAmountPerBill)} / Bill`}
                 showInfo={false}
               />
             </div>
 
             {/* Penjualan */}
             <SectionShell title="Penjualan">
-              {salesExpandableRows.map((row, idx) => {
+              {report.salesExpandableRows.map((row, idx) => {
                 const isTotal = row.label === 'Total Penjualan Kotor'
                 const hasDetails = Boolean(row.details?.length)
                 const isOpen = expandedSales[row.key] ?? false
@@ -1050,7 +678,7 @@ export default function SummaryV3Page() {
                         ))}
                       </div>
                     )}
-                    {idx < salesExpandableRows.length - 1 && !isTotal && (
+                    {idx < report.salesExpandableRows.length - 1 && !isTotal && (
                       <div className="border-t border-neutral-200" />
                     )}
                   </div>
@@ -1062,18 +690,18 @@ export default function SummaryV3Page() {
             <SectionShell title="Statistik">
               <RowLine
                 label="Total Penjualan Kotor"
-                value={formatCurrency(metrics.statisticsGrossSales)}
+                value={formatCurrency(report.metrics.statisticsGrossSales)}
               />
               <RowLine
                 label="Jumlah Transaksi"
-                value={`${formatNumber(metrics.statisticsTotalBill)} Bill`}
+                value={`${formatNumber(report.metrics.statisticsTotalBill)} Bill`}
                 leftAdornment={
                   <Info className="mt-0.5 h-4 w-4 text-neutral-400" />
                 }
               />
               <RowLine
                 label="Jumlah Pelanggan"
-                value={`${formatNumber(metrics.statisticsTotalGuest)} Orang`}
+                value={`${formatNumber(report.metrics.statisticsTotalGuest)} Orang`}
                 leftAdornment={
                   <Info className="mt-0.5 h-4 w-4 text-neutral-400" />
                 }
@@ -1081,17 +709,17 @@ export default function SummaryV3Page() {
               <DottedRule />
               <RowLine
                 label="Rata-Rata Nilai / Transaksi"
-                value={`${formatCurrency(metrics.avgAmountPerBill)} / Bill`}
+                value={`${formatCurrency(report.metrics.avgAmountPerBill)} / Bill`}
               />
               <RowLine
                 label="Rata-Rata Nilai / Pelanggan"
-                value={`${formatCurrency(metrics.avgAmountPerGuest)} / Orang`}
+                value={`${formatCurrency(report.metrics.avgAmountPerGuest)} / Orang`}
               />
             </SectionShell>
 
             {/* Pemasukan Dompet */}
             <SectionShell title="Pemasukan Dompet">
-              {walletIncomeExpandableRows.map((row, idx) => {
+              {report.walletIncomeExpandableRows.map((row, idx) => {
                 const hasDetails = Boolean(row.details?.length)
                 const isOpen = expandedWalletIncome[row.key] ?? false
                 const showChevronUp =
@@ -1178,7 +806,7 @@ export default function SummaryV3Page() {
                         ))}
                       </div>
                     )}
-                    {idx < walletIncomeExpandableRows.length - 1 && (
+                    {idx < report.walletIncomeExpandableRows.length - 1 && (
                       <div className="border-t border-neutral-200" />
                     )}
                   </div>
@@ -1190,7 +818,7 @@ export default function SummaryV3Page() {
                   Total Pemasukan Dompet
                 </span>
                 <span className="inline-flex items-center gap-1 text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(metrics.totalWalletIncome)}
+                  {formatCurrency(report.metrics.totalWalletIncome)}
                   <ChevronDown className="h-4 w-4 text-neutral-500" />
                 </span>
               </div>
@@ -1198,14 +826,14 @@ export default function SummaryV3Page() {
 
             {/* Pengeluaran Dompet */}
             <SectionShell title="Pengeluaran Dompet">
-              {sections.walletExpenseRows.map((row, idx) => (
+              {report.sections.walletExpenseRows.map((row, idx) => (
                 <div key={row.label}>
                   <RowLine
                     label={row.label}
                     value={row.value}
                     valueClassName="text-red-600"
                   />
-                  {idx < sections.walletExpenseRows.length - 1 && (
+                  {idx < report.sections.walletExpenseRows.length - 1 && (
                     <div className="border-t border-neutral-200" />
                   )}
                 </div>
@@ -1216,7 +844,7 @@ export default function SummaryV3Page() {
                   Total Pengeluaran Dompet
                 </span>
                 <span className="text-sm font-bold tabular-nums text-red-600">
-                  {formatCurrency(metrics.totalWalletExpense, true)}
+                  {formatCurrency(report.metrics.totalWalletExpense, true)}
                 </span>
               </div>
             </SectionShell>
@@ -1229,7 +857,7 @@ export default function SummaryV3Page() {
                 label="Jumlah Item Terjual"
                 value={formatNumber(data.onlineFood.productSoldCount || 0)}
               />
-              {onlineFoodExpandableRows.map((row) => {
+              {report.onlineFoodExpandableRows.map((row) => {
                 if (row.label === 'Jumlah Produk Terjual') return null
                 const hasDetails = Boolean(row.details?.length)
                 const key = row.key
@@ -1374,7 +1002,7 @@ export default function SummaryV3Page() {
                   Total Penjualan Online Food
                 </span>
                 <span className="text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(metrics.grossSalesOnlineFood)}
+                  {formatCurrency(report.metrics.grossSalesOnlineFood)}
                 </span>
               </div>
             </SectionShell>
@@ -1385,7 +1013,7 @@ export default function SummaryV3Page() {
                 label="Jumlah Item Terjual"
                 value={formatNumber(data.cityLedger.productSoldCount || 0)}
               />
-              {cityLedgerExpandableRows.map((row) => {
+              {report.cityLedgerExpandableRows.map((row) => {
                 const hasDetails = Boolean(row.details?.length)
                 const key = `cl-${row.key}`
                 const isOpen = expandedSales[key] ?? false
@@ -1529,14 +1157,14 @@ export default function SummaryV3Page() {
                   Total Penjualan City Ledger
                 </span>
                 <span className="text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(metrics.grossCityLedger)}
+                  {formatCurrency(report.metrics.grossCityLedger)}
                 </span>
               </div>
             </SectionShell>
 
             {/* Compliment */}
             <SectionShell title="Compliment">
-              {complimentExpandableRows.map((row) => {
+              {report.complimentExpandableRows.map((row) => {
                 const hasDetails = Boolean(row.details?.length)
                 const isOpen = expandedCompliment[row.key] ?? false
                 if (row.label === 'Jumlah Transaksi') {
@@ -1689,21 +1317,21 @@ export default function SummaryV3Page() {
             <SectionShell title="Pendapatan">
               <RowLine
                 label="Total Penjualan Kotor"
-                value={formatCurrency(metrics.grossSales)}
+                value={formatCurrency(report.metrics.grossSales)}
               />
               <RowLine
                 label="Total Penjualan Online Food"
-                value={formatCurrency(metrics.grossSalesOnlineFood)}
+                value={formatCurrency(report.metrics.grossSalesOnlineFood)}
               />
               <RowLine
                 label="Total Penjualan City Ledger"
-                value={formatCurrency(metrics.grossCityLedger)}
+                value={formatCurrency(report.metrics.grossCityLedger)}
               />
               <RowLine
                 label="Total Penjualan Compliment"
-                value={formatCurrency(metrics.grossCompliment)}
+                value={formatCurrency(report.metrics.grossCompliment)}
               />
-              {revenueExpandableRows
+              {report.revenueExpandableRows
                 .filter((r) =>
                   ['Platform Fee', 'Multiprice Fee', 'Xendit Fee'].includes(
                     r.label,
@@ -1797,26 +1425,26 @@ export default function SummaryV3Page() {
                   Total Pendapatan Kotor
                 </span>
                 <span className="text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(metrics.totalGrossSales)}
+                  {formatCurrency(report.metrics.totalGrossSales)}
                 </span>
               </div>
               <RowLine
                 label="Harga Pokok Penjualan (HPP)"
-                value={formatCurrency(metrics.cogs, true)}
+                value={formatCurrency(report.metrics.cogs, true)}
                 valueClassName="text-red-600"
               />
               <RowLine
                 label="Pembulatan"
-                value={formatCurrency(metrics.rounding)}
+                value={formatCurrency(report.metrics.rounding)}
               />
               <RowLine
                 label="Margin Penjualan"
-                value={formatCurrency(metrics.totalSalesRevenue)}
+                value={formatCurrency(report.metrics.totalSalesRevenue)}
               />
               <DottedRule />
               <RowLine
                 label="Waste / Bahan Terbuang"
-                value={formatCurrency(metrics.loss, true)}
+                value={formatCurrency(report.metrics.loss, true)}
                 valueClassName="text-red-600"
               />
               <div className="flex items-center justify-between gap-4 px-4 py-3.5">
@@ -1824,7 +1452,7 @@ export default function SummaryV3Page() {
                   Margin Bisnis
                 </span>
                 <span className="text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(metrics.totalNetRevenue)}
+                  {formatCurrency(report.metrics.totalNetRevenue)}
                 </span>
               </div>
             </SectionShell>

@@ -1,3 +1,10 @@
+/**
+ * Satu modul: tipe API, formatter, fetch, dan kalkulasi view per versi UI.
+ * Alur: fetch → SummaryData → calculateReportV1 | calculateReportV2 → render.
+ */
+
+// --- Types (response API) ---
+
 export type ApiResponse = {
   isSuccess: boolean;
   message: string;
@@ -106,6 +113,8 @@ export type SummaryData = {
   loss: number;
 };
 
+// --- Env & format ---
+
 export const REPORT_BASE_URL = process.env.NEXT_PUBLIC_REPORT_BASE_URL ?? "http://localhost:3000";
 export const REPORT_BEARER_TOKEN = process.env.NEXT_PUBLIC_REPORT_TOKEN ?? "";
 
@@ -126,7 +135,9 @@ export function formatDateForInput(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-export type BaseMetrics = {
+// --- Angka inti (dipakai membangun baris) ---
+
+export type ReportMetrics = {
   grossSales: number;
   grossSalesOnlineFood: number;
   grossCityLedger: number;
@@ -151,7 +162,7 @@ export type BaseMetrics = {
   totalWalletExpense: number;
 };
 
-export function computeBaseMetrics(data: SummaryData): BaseMetrics {
+function computeMetrics(data: SummaryData): ReportMetrics {
   const grossSales =
     (data.sales.productSoldTotal || 0) -
     (data.sales.discount || 0) +
@@ -211,7 +222,11 @@ export function computeBaseMetrics(data: SummaryData): BaseMetrics {
     grossSales + grossSalesOnlineFood + grossCityLedger - totalPlatformFee - totalMultipriceFee - totalXenditFee;
 
   const grossRevenue = totalGrossSales;
-  const cogs = (data.sales.cogs || 0) + (data.onlineFood.cogs || 0) + (data.cityLedger.cogs || 0) + (data.compliment.cogs || 0);
+  const cogs =
+    (data.sales.cogs || 0) +
+    (data.onlineFood.cogs || 0) +
+    (data.cityLedger.cogs || 0) +
+    (data.compliment.cogs || 0);
   const salesRevenue = grossRevenue - cogs;
   const rounding =
     (data.sales.rounding || 0) +
@@ -268,9 +283,19 @@ export function computeBaseMetrics(data: SummaryData): BaseMetrics {
   };
 }
 
-export function createRows(data: SummaryData) {
-  const m = computeBaseMetrics(data);
+type SectionRows = {
+  salesRows: MetricRow[];
+  statisticRows: MetricRow[];
+  reservationRows: MetricRow[];
+  cityLedgerRows: MetricRow[];
+  onlineFoodRows: MetricRow[];
+  revenueRows: MetricRow[];
+  incomeRows: MetricRow[];
+  walletIncomeRows: MetricRow[];
+  walletExpenseRows: MetricRow[];
+};
 
+function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
   return {
     salesRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.sales.productSoldCount || 0) },
@@ -283,14 +308,14 @@ export function createRows(data: SummaryData) {
       { label: "Multiprice Fee", value: formatCurrency(data.sales.multipriceFee || 0) },
       { label: "Pembulatan", value: formatCurrency(data.sales.rounding || 0) },
       { label: "Total Penjualan Kotor", value: formatCurrency(m.grossSales) },
-    ] satisfies MetricRow[],
+    ],
     statisticRows: [
       { label: "Total Penjualan Kotor", value: formatCurrency(m.statisticsGrossSales) },
       { label: "Total Bill / Order / Transaksi", value: `${formatNumber(m.statisticsTotalBill)} Bill` },
       { label: "Pengunjung / Pembeli", value: `${formatNumber(m.statisticsTotalGuest)} Orang` },
       { label: "Rata-rata Nilai Penjualan / orang", value: `${formatCurrency(m.avgAmountPerGuest)} / Orang` },
       { label: "Rata-rata Nilai Penjualan / Bill", value: `${formatCurrency(m.avgAmountPerBill)} / Bill` },
-    ] satisfies MetricRow[],
+    ],
     reservationRows: [
       {
         label: "Jumlah Reservasi",
@@ -328,7 +353,7 @@ export function createRows(data: SummaryData) {
             (data.reservation.failed.totalPaidDeposit || 0),
         ),
       },
-    ] satisfies MetricRow[],
+    ],
     cityLedgerRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.cityLedger.productSoldCount || 0) },
       { label: "Total Pesanan", value: `${formatNumber(data.cityLedger.orderCount || 0)} Pesanan` },
@@ -340,7 +365,7 @@ export function createRows(data: SummaryData) {
       { label: "Multiprice Fee", value: formatCurrency(data.cityLedger.multipriceFee || 0) },
       { label: "Pembulatan", value: formatCurrency(data.cityLedger.rounding || 0) },
       { label: "Total Penjualan Kotor", value: formatCurrency(m.grossCityLedger) },
-    ] satisfies MetricRow[],
+    ],
     onlineFoodRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.onlineFood.productSoldCount || 0) },
       { label: "Total Pesanan", value: `${formatNumber(data.onlineFood.orderCount || 0)} Pesanan` },
@@ -350,7 +375,7 @@ export function createRows(data: SummaryData) {
       { label: "Multiprice Fee", value: formatCurrency(data.onlineFood.multipriceFee || 0) },
       { label: "Pembulatan", value: formatCurrency(data.onlineFood.rounding || 0) },
       { label: "Total Penjualan Kotor", value: formatCurrency(m.grossSalesOnlineFood) },
-    ] satisfies MetricRow[],
+    ],
     revenueRows: [
       { label: "Total Penjualan Kotor", value: formatCurrency(m.grossSales) },
       { label: "Total Penjualan Online Food", value: formatCurrency(m.grossSalesOnlineFood) },
@@ -359,7 +384,7 @@ export function createRows(data: SummaryData) {
       { label: "Multiprice Fee", value: formatCurrency(m.totalMultipriceFee, true), negative: true },
       { label: "Xendit Fee", value: formatCurrency(m.totalXenditFee, true), negative: true, hint: "Lihat Selengkapnya" },
       { label: "Total Pendapatan Kotor", value: formatCurrency(m.totalGrossSales) },
-    ] satisfies MetricRow[],
+    ],
     incomeRows: [
       { label: "Total Pendapatan Kotor", value: formatCurrency(m.grossRevenue) },
       { label: "Harga Pokok Penjualan", value: formatCurrency(m.cogs, true), negative: true },
@@ -376,7 +401,7 @@ export function createRows(data: SummaryData) {
       },
       { label: "Rugi", value: formatCurrency(m.loss, true), negative: true, hint: "akumulasi stock terbuang" },
       { label: "Total Pendapatan Bersih", value: formatCurrency(m.totalNetRevenue) },
-    ] satisfies MetricRow[],
+    ],
     walletIncomeRows: [
       { label: "Tunai", value: formatCurrency(data.walletIncome.cashAmount || 0), hint: `${formatNumber(data.walletIncome.cashCount || 0)} Transaksi` },
       { label: "Non-Tunai", value: formatCurrency(data.walletIncome.nonCashAmount || 0), hint: `${formatNumber(data.walletIncome.nonCashCount || 0)} Transaksi` },
@@ -386,7 +411,7 @@ export function createRows(data: SummaryData) {
       { label: "Online Food", value: formatCurrency(data.walletIncome.onlineFoodAmount || 0), hint: `${formatNumber(data.walletIncome.onlineFoodCount || 0)} Transaksi` },
       { label: "City Ledger", value: formatCurrency(data.walletIncome.cityLedgerAmount || 0), hint: `${formatNumber(data.walletIncome.cityLedgerCount || 0)} Transaksi` },
       { label: "Deposit", value: formatCurrency(data.walletIncome.depositAmount || 0), hint: `${formatNumber(data.walletIncome.depositCount || 0)} Transaksi` },
-    ] satisfies MetricRow[],
+    ],
     walletExpenseRows: [
       { label: "Tunai", value: formatCurrency(data.walletExpense.cash || 0, true), negative: true },
       { label: "Non-Tunai", value: formatCurrency(data.walletExpense.nonCash || 0, true), negative: true },
@@ -396,6 +421,287 @@ export function createRows(data: SummaryData) {
       { label: "City Ledger", value: formatCurrency(data.walletExpense.cityLedger || 0, true), negative: true },
       { label: "Online Food", value: formatCurrency(data.walletExpense.onlineFood || 0, true), negative: true },
       { label: "Deposit", value: formatCurrency(data.walletExpense.deposit || 0, true), negative: true },
-    ] satisfies MetricRow[],
+    ],
   };
+}
+
+type ChannelSlice = Pick<
+  SalesBlock,
+  "orderGeneralCount" | "orderSplitBillCount" | "productNormalSoldTotal" | "productCustomAmountSoldTotal"
+>;
+
+function expandOrderProductChannelRows(
+  rows: MetricRow[],
+  block: ChannelSlice,
+  keys: {
+    orderDetailKey: string;
+    productDetailKey: string;
+    defaultKey: (row: MetricRow) => string;
+  },
+): ExpandableMetricRow[] {
+  return rows.map((row) => {
+    if (row.label === "Total Pesanan") {
+      return {
+        ...row,
+        key: keys.orderDetailKey,
+        details: [
+          { label: "Pesanan General", value: formatNumber(block.orderGeneralCount || 0) },
+          { label: "Pesanan Split Bill", value: formatNumber(block.orderSplitBillCount || 0) },
+        ],
+      };
+    }
+    if (row.label === "Total Produk Terjual") {
+      return {
+        ...row,
+        key: keys.productDetailKey,
+        details: [
+          { label: "Harga Normal", value: formatCurrency(block.productNormalSoldTotal || 0) },
+          { label: "Harga Custom Amount", value: formatCurrency(block.productCustomAmountSoldTotal || 0) },
+        ],
+      };
+    }
+    return { ...row, key: keys.defaultKey(row) };
+  });
+}
+
+function platformFeeRevenueDetails(data: SummaryData): MetricRow[] {
+  const platformFeeMap = new Map<number, number>();
+  const all = [
+    ...data.platformFeeBreakdown.sales,
+    ...data.platformFeeBreakdown.onlineFood,
+    ...data.platformFeeBreakdown.cityLedger,
+  ];
+  for (const item of all) {
+    platformFeeMap.set(item.price, (platformFeeMap.get(item.price) || 0) + (item.count || 0));
+  }
+  const details = [...platformFeeMap.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([price, count]) => ({
+      label: `${formatNumber(price)} x ${formatNumber(count)} Transaksi`,
+      value: formatCurrency(price * count, true),
+      negative: true as const,
+    }));
+  if (data.platformFeeBreakdown.compliment) {
+    details.push({
+      label: "Compliment",
+      value: formatCurrency(data.platformFeeBreakdown.compliment, true),
+      negative: true,
+    });
+  }
+  return details;
+}
+
+function placeholderXenditFeeDetails(): MetricRow[] {
+  return [
+    { label: "E-Wallet x 0 Transaksi", value: formatCurrency(0, true), negative: true },
+    { label: "QRIS x 0 Transaksi", value: formatCurrency(0, true), negative: true },
+    { label: "VA x 0 Transaksi", value: formatCurrency(0, true), negative: true },
+  ];
+}
+
+// --- Public: UI klasik ---
+
+export function calculateReportV1(data: SummaryData) {
+  const m = computeMetrics(data);
+  const sections = buildSectionRows(data, m);
+
+  const salesExpandableRows = expandOrderProductChannelRows(sections.salesRows, data.sales, {
+    orderDetailKey: "total-order",
+    productDetailKey: "total-product-sold",
+    defaultKey: (row) => row.label,
+  });
+
+  const cityLedgerExpandableRows = expandOrderProductChannelRows(sections.cityLedgerRows, data.cityLedger, {
+    orderDetailKey: "city-ledger-total-order",
+    productDetailKey: "city-ledger-total-product-sold",
+    defaultKey: (row) => `city-ledger-${row.label}`,
+  });
+
+  const revenueExpandableRows: ExpandableMetricRow[] = sections.revenueRows.map((row) => {
+    if (row.label === "Platform Fee") {
+      return { ...row, key: "revenue-platform-fee", details: platformFeeRevenueDetails(data) };
+    }
+    if (row.label === "Xendit Fee") {
+      return { ...row, key: "revenue-xendit-fee", details: placeholderXenditFeeDetails() };
+    }
+    return { ...row, key: `revenue-${row.label}` };
+  });
+
+  const walletIncomeExpandableRows: ExpandableMetricRow[] = sections.walletIncomeRows.map((row) => {
+    if (row.label === "Tunai") {
+      return {
+        ...row,
+        key: "wallet-income-cash",
+        details: [
+          { label: "Pemasukan Manual", value: formatCurrency(0) },
+          { label: "Pemasukan Penjualan", value: formatCurrency(data.walletIncome.cashAmount || 0) },
+        ],
+      };
+    }
+    if (row.label === "Deposit") {
+      const depositCount = data.walletIncome.depositCount || 0;
+      return {
+        ...row,
+        key: "wallet-income-deposit",
+        details: [
+          { label: `Tunai x ${formatNumber(depositCount)} Transaksi`, value: formatCurrency(data.walletIncome.depositAmount || 0) },
+          { label: "Non Tunai x 0 Transaksi", value: formatCurrency(0) },
+          { label: "Debit x 0 Transaksi", value: formatCurrency(0) },
+          { label: "QRIS Static x 0 Transaksi", value: formatCurrency(0) },
+          { label: "Transfer Manual x 0 Transaksi", value: formatCurrency(0) },
+        ],
+      };
+    }
+    return { ...row, key: `wallet-income-${row.label}` };
+  });
+
+  return {
+    sections,
+    salesExpandableRows,
+    cityLedgerExpandableRows,
+    revenueExpandableRows,
+    walletIncomeExpandableRows,
+  };
+}
+
+// --- Public: UI summary v3 ---
+
+function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
+  const c = data.compliment;
+  return [
+    { label: "Jumlah Item Terjual", value: formatNumber(c.productSoldCount || 0), key: "cmp-items" },
+    {
+      label: "Jumlah Transaksi",
+      value: `${formatNumber(c.orderCount || 0)} Pesanan`,
+      key: "cmp-orders",
+      details: [
+        { label: "Pesanan General", value: formatNumber(c.orderGeneralCount || 0) },
+        { label: "Pesanan Split Bill", value: formatNumber(c.orderSplitBillCount || 0) },
+      ],
+    },
+    {
+      label: "Total Penjualan Produk",
+      value: formatCurrency(c.productSoldTotal || 0),
+      key: "cmp-product",
+      details: [
+        { label: "Harga Normal", value: formatCurrency(c.productNormalSoldTotal || 0) },
+        { label: "Harga Custom Amount", value: formatCurrency(c.productCustomAmountSoldTotal || 0) },
+      ],
+    },
+    { label: "Platform Fee", value: formatCurrency(c.platformFee || 0), key: "cmp-pf" },
+  ];
+}
+
+function revenueExpandableRowsV2(revenueRows: MetricRow[], data: SummaryData): ExpandableMetricRow[] {
+  return revenueRows.map((row) => {
+    if (row.label === "Platform Fee") {
+      return { ...row, key: "revenue-platform-fee", details: platformFeeRevenueDetails(data) };
+    }
+    if (row.label === "Multiprice Fee") {
+      return {
+        ...row,
+        key: "revenue-multiprice",
+        details: [
+          { label: "Penjualan", value: formatCurrency(data.sales.multipriceFee || 0, true), negative: true },
+          { label: "Online Food", value: formatCurrency(data.onlineFood.multipriceFee || 0, true), negative: true },
+          { label: "City Ledger", value: formatCurrency(data.cityLedger.multipriceFee || 0, true), negative: true },
+          { label: "Compliment", value: formatCurrency(data.compliment.multipriceFee || 0, true), negative: true },
+        ],
+      };
+    }
+    if (row.label === "Xendit Fee") {
+      return { ...row, key: "revenue-xendit-fee", details: placeholderXenditFeeDetails() };
+    }
+    return { ...row, key: `revenue-${row.label}` };
+  });
+}
+
+function walletIncomeExpandableRowsV2(walletIncomeRows: MetricRow[], data: SummaryData): ExpandableMetricRow[] {
+  return walletIncomeRows.map((row) => {
+    if (row.label === "Tunai") {
+      return {
+        ...row,
+        key: "wallet-income-cash",
+        details: [
+          { label: "Pemasukan Manual", value: formatCurrency(0) },
+          { label: "Pemasukan Penjualan", value: formatCurrency(data.walletIncome.cashAmount || 0) },
+        ],
+      };
+    }
+    if (row.label === "Online Food") {
+      return {
+        ...row,
+        key: "wallet-income-of",
+        details: [{ label: "Akumulasi Online Food", value: formatCurrency(data.walletIncome.onlineFoodAmount || 0) }],
+      };
+    }
+    if (row.label === "Deposit") {
+      const depositCount = data.walletIncome.depositCount || 0;
+      return {
+        ...row,
+        key: "wallet-income-deposit",
+        details: [
+          { label: `Tunai x ${formatNumber(depositCount)} Transaksi`, value: formatCurrency(data.walletIncome.depositAmount || 0) },
+          { label: "Non Tunai x 0 Transaksi", value: formatCurrency(0) },
+          { label: "Debit x 0 Transaksi", value: formatCurrency(0) },
+          { label: "QRIS Static x 0 Transaksi", value: formatCurrency(0) },
+          { label: "Transfer Manual x 0 Transaksi", value: formatCurrency(0) },
+        ],
+      };
+    }
+    return { ...row, key: `wallet-income-${row.label}` };
+  });
+}
+
+export function calculateReportV2(data: SummaryData) {
+  const metrics = computeMetrics(data);
+  const sections = buildSectionRows(data, metrics);
+
+  const salesExpandableRows = expandOrderProductChannelRows(sections.salesRows, data.sales, {
+    orderDetailKey: "total-order",
+    productDetailKey: "total-product-sold",
+    defaultKey: (row) => row.label,
+  });
+
+  const cityLedgerExpandableRows = expandOrderProductChannelRows(sections.cityLedgerRows, data.cityLedger, {
+    orderDetailKey: "city-ledger-total-order",
+    productDetailKey: "city-ledger-total-product-sold",
+    defaultKey: (row) => `city-ledger-${row.label}`,
+  });
+
+  const onlineFoodExpandableRows = expandOrderProductChannelRows(sections.onlineFoodRows, data.onlineFood, {
+    orderDetailKey: "of-total-order",
+    productDetailKey: "of-total-product-sold",
+    defaultKey: (row) => `of-${row.label}`,
+  });
+
+  return {
+    metrics,
+    sections,
+    salesExpandableRows,
+    cityLedgerExpandableRows,
+    onlineFoodExpandableRows,
+    complimentExpandableRows: complimentExpandableRows(data),
+    revenueExpandableRows: revenueExpandableRowsV2(sections.revenueRows, data),
+    walletIncomeExpandableRows: walletIncomeExpandableRowsV2(sections.walletIncomeRows, data),
+  };
+}
+
+// --- Fetch ---
+
+export async function fetchSaleSummaryRange(startDate: string, endDate: string): Promise<SummaryData> {
+  const response = await fetch(
+    `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${endDate}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(REPORT_BEARER_TOKEN ? { Authorization: `Bearer ${REPORT_BEARER_TOKEN}` } : {}),
+      },
+    },
+  );
+  const json = (await response.json()) as ApiResponse;
+  if (!json?.isSuccess || !json?.data) {
+    throw new Error("Gagal mengambil data report.");
+  }
+  return json.data;
 }

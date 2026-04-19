@@ -10,20 +10,18 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ReportViewToggle } from "@/components/report-view-toggle";
 import {
-  type ApiResponse,
   type ExpandableMetricRow,
   type MetricRow,
   type ReservationState,
   type SummaryData,
-  REPORT_BASE_URL,
   REPORT_BEARER_TOKEN,
-  createRows,
+  calculateReportV1,
+  fetchSaleSummaryRange,
   formatCurrency,
   formatDateForInput,
   formatNumber,
-} from "@/lib/report-summary";
+} from "@/lib/report-calculations";
 
-const baseUrl = REPORT_BASE_URL;
 const bearerToken = REPORT_BEARER_TOKEN;
 
 function SectionCard({ title, rows }: { title: string; rows: MetricRow[] }) {
@@ -226,160 +224,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [data, setData] = useState<SummaryData | null>(null);
 
-  const sections = useMemo(() => (data ? createRows(data) : null), [data]);
-
-  const salesExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.salesRows.map((row) => {
-            if (row.label === "Total Pesanan") {
-              return {
-                ...row,
-                key: "total-order",
-                details: [
-                  { label: "Pesanan General", value: formatNumber(data.sales.orderGeneralCount || 0) },
-                  { label: "Pesanan Split Bill", value: formatNumber(data.sales.orderSplitBillCount || 0) },
-                ],
-              };
-            }
-            if (row.label === "Total Produk Terjual") {
-              return {
-                ...row,
-                key: "total-product-sold",
-                details: [
-                  { label: "Harga Normal", value: formatCurrency(data.sales.productNormalSoldTotal || 0) },
-                  { label: "Harga Custom Amount", value: formatCurrency(data.sales.productCustomAmountSoldTotal || 0) },
-                ],
-              };
-            }
-            return { ...row, key: row.label };
-          })
-        : [],
-    [data, sections],
-  );
-
-  const cityLedgerExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.cityLedgerRows.map((row) => {
-            if (row.label === "Total Pesanan") {
-              return {
-                ...row,
-                key: "city-ledger-total-order",
-                details: [
-                  { label: "Pesanan General", value: formatNumber(data.cityLedger.orderGeneralCount || 0) },
-                  { label: "Pesanan Split Bill", value: formatNumber(data.cityLedger.orderSplitBillCount || 0) },
-                ],
-              };
-            }
-            if (row.label === "Total Produk Terjual") {
-              return {
-                ...row,
-                key: "city-ledger-total-product-sold",
-                details: [
-                  { label: "Harga Normal", value: formatCurrency(data.cityLedger.productNormalSoldTotal || 0) },
-                  { label: "Harga Custom Amount", value: formatCurrency(data.cityLedger.productCustomAmountSoldTotal || 0) },
-                ],
-              };
-            }
-            return { ...row, key: `city-ledger-${row.label}` };
-          })
-        : [],
-    [data, sections],
-  );
-
-  const revenueExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.revenueRows.map((row) => {
-            if (row.label === "Platform Fee") {
-              const platformFeeMap = new Map<number, number>();
-              const allPlatformFeeBreakdowns = [
-                ...data.platformFeeBreakdown.sales,
-                ...data.platformFeeBreakdown.onlineFood,
-                ...data.platformFeeBreakdown.cityLedger,
-              ];
-
-              for (const item of allPlatformFeeBreakdowns) {
-                const currentCount = platformFeeMap.get(item.price) || 0;
-                platformFeeMap.set(item.price, currentCount + (item.count || 0));
-              }
-
-              const details = [...platformFeeMap.entries()]
-                .sort((a, b) => a[0] - b[0])
-                .map(([price, count]) => ({
-                  label: `${formatNumber(price)} x ${formatNumber(count)} Transaksi`,
-                  value: formatCurrency(price * count, true),
-                  negative: true,
-                }));
-
-              if (data.platformFeeBreakdown.compliment) {
-                details.push({
-                  label: "Compliment",
-                  value: formatCurrency(data.platformFeeBreakdown.compliment, true),
-                  negative: true,
-                });
-              }
-
-              return {
-                ...row,
-                key: "revenue-platform-fee",
-                details,
-              };
-            }
-            if (row.label === "Xendit Fee") {
-              return {
-                ...row,
-                key: "revenue-xendit-fee",
-                details: [
-                  { label: "E-Wallet x 0 Transaksi", value: formatCurrency(0, true), negative: true },
-                  { label: "QRIS x 0 Transaksi", value: formatCurrency(0, true), negative: true },
-                  { label: "VA x 0 Transaksi", value: formatCurrency(0, true), negative: true },
-                ],
-              };
-            }
-            return { ...row, key: `revenue-${row.label}` };
-          })
-        : [],
-    [data, sections],
-  );
-
-  const walletIncomeExpandableRows = useMemo<ExpandableMetricRow[]>(
-    () =>
-      data && sections
-        ? sections.walletIncomeRows.map((row) => {
-            if (row.label === "Tunai") {
-              return {
-                ...row,
-                key: "wallet-income-cash",
-                details: [
-                  { label: "Pemasukan Manual", value: formatCurrency(0) },
-                  { label: "Pemasukan Penjualan", value: formatCurrency(data.walletIncome.cashAmount || 0) },
-                ],
-              };
-            }
-            if (row.label === "Deposit") {
-              const depositCount = data.walletIncome.depositCount || 0;
-              return {
-                ...row,
-                key: "wallet-income-deposit",
-                details: [
-                  {
-                    label: `Tunai x ${formatNumber(depositCount)} Transaksi`,
-                    value: formatCurrency(data.walletIncome.depositAmount || 0),
-                  },
-                  { label: "Non Tunai x 0 Transaksi", value: formatCurrency(0) },
-                  { label: "Debit x 0 Transaksi", value: formatCurrency(0) },
-                  { label: "QRIS Static x 0 Transaksi", value: formatCurrency(0) },
-                  { label: "Transfer Manual x 0 Transaksi", value: formatCurrency(0) },
-                ],
-              };
-            }
-            return { ...row, key: `wallet-income-${row.label}` };
-          })
-        : [],
-    [data, sections],
-  );
+  const report = useMemo(() => (data ? calculateReportV1(data) : null), [data]);
 
   async function fetchSaleSummary() {
     if (!startDate || !endDate) {
@@ -390,17 +235,8 @@ export default function Home() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`${baseUrl}/v2/report/sale/summary?startDate=${startDate}&endDate=${endDate}`, {
-        headers: {
-          "Content-Type": "application/json",
-          ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-        },
-      });
-      const json = (await response.json()) as ApiResponse;
-      if (!json?.isSuccess || !json?.data) {
-        throw new Error("Gagal mengambil data report.");
-      }
-      setData(json.data);
+      const summary = await fetchSaleSummaryRange(startDate, endDate);
+      setData(summary);
     } catch (err) {
       setData(null);
       setError(err instanceof Error ? err.message : "Terjadi kesalahan saat mengambil data.");
@@ -470,17 +306,17 @@ export default function Home() {
           </Alert>
         )}
 
-        {sections && data && (
+        {report && data && (
           <div className="grid gap-4">
-            <ExpandableSectionCard title="Penjualan" rows={salesExpandableRows} />
-            <SectionCard title="Statistik" rows={sections.statisticRows} />
+            <ExpandableSectionCard title="Penjualan" rows={report.salesExpandableRows} />
+            <SectionCard title="Statistik" rows={report.sections.statisticRows} />
             <ReservationSectionCard reservation={data.reservation} />
-            <ExpandableSectionCard title="City Ledger" rows={cityLedgerExpandableRows} />
-            <SectionCard title="Online Food" rows={sections.onlineFoodRows} />
-            <ExpandableSectionCard title="Pendapatan" rows={revenueExpandableRows} />
-            <SectionCard title="Pemasukan" rows={sections.incomeRows} />
-            <ExpandableSectionCard title="Pemasukan Dompet" rows={walletIncomeExpandableRows} />
-            <SectionCard title="Pengeluaran Dompet" rows={sections.walletExpenseRows} />
+            <ExpandableSectionCard title="City Ledger" rows={report.cityLedgerExpandableRows} />
+            <SectionCard title="Online Food" rows={report.sections.onlineFoodRows} />
+            <ExpandableSectionCard title="Pendapatan" rows={report.revenueExpandableRows} />
+            <SectionCard title="Pemasukan" rows={report.sections.incomeRows} />
+            <ExpandableSectionCard title="Pemasukan Dompet" rows={report.walletIncomeExpandableRows} />
+            <SectionCard title="Pengeluaran Dompet" rows={report.sections.walletExpenseRows} />
           </div>
         )}
       </div>
