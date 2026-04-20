@@ -39,7 +39,7 @@ export type PriceCount = {
 
 export type SalesBlock = {
   productSoldCount: number;
-  orderCount: number;
+  orderCount?: number;
   orderGeneralCount?: number;
   orderSplitBillCount?: number;
   orderDineInCount?: number;
@@ -60,6 +60,12 @@ export type SalesBlock = {
   guestCount: number;
   multiprices?: MultipriceBreakdown[];
 };
+
+export function getOrderCountByBlock(block: Pick<SalesBlock, "orderGeneralCount" | "orderSplitBillCount" | "orderDineInCount" | "orderTakeAwayCount" | "orderDeliveryCount">): number {
+  const generalAndSplit = (block.orderGeneralCount || 0) + (block.orderSplitBillCount || 0);
+  if (generalAndSplit > 0) return generalAndSplit;
+  return (block.orderDineInCount || 0) + (block.orderTakeAwayCount || 0) + (block.orderDeliveryCount || 0);
+}
 
 export type ReservationState = {
   totalReservation: number;
@@ -285,7 +291,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.compliment.rounding || 0);
 
   const statisticsGrossSales = grossSales + grossCityLedger;
-  const statisticsTotalBill = (data.sales.orderCount || 0) + (data.cityLedger.orderCount || 0);
+  const statisticsTotalBill = getOrderCountByBlock(data.sales) + getOrderCountByBlock(data.cityLedger);
   const statisticsTotalGuest = (data.sales.guestCount || 0) + (data.cityLedger.guestCount || 0);
   const avgAmountPerGuest = statisticsTotalGuest ? statisticsGrossSales / statisticsTotalGuest : 0;
   const avgAmountPerBill = statisticsTotalBill ? statisticsGrossSales / statisticsTotalBill : 0;
@@ -396,7 +402,7 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
   return {
     salesRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.sales.productSoldCount || 0) },
-      { label: "Total Pesanan", value: `${formatNumber(data.sales.orderCount || 0)} Pesanan` },
+      { label: "Total Pesanan", value: `${formatNumber(getOrderCountByBlock(data.sales))} Pesanan` },
       { label: "Total Produk Terjual", value: formatCurrency(data.sales.productSoldTotal || 0) },
       { label: "Diskon", value: formatCurrency(data.sales.discount || 0, true), negative: true },
       { label: "Pajak", value: formatCurrency(data.sales.tax || 0) },
@@ -453,7 +459,7 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
     ],
     cityLedgerRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.cityLedger.productSoldCount || 0) },
-      { label: "Total Pesanan", value: `${formatNumber(data.cityLedger.orderCount || 0)} Pesanan` },
+      { label: "Total Pesanan", value: `${formatNumber(getOrderCountByBlock(data.cityLedger))} Pesanan` },
       { label: "Total Produk Terjual", value: formatCurrency(data.cityLedger.productSoldTotal || 0) },
       { label: "Diskon", value: formatCurrency(data.cityLedger.discount || 0, true), negative: true },
       { label: "Pajak", value: formatCurrency(data.cityLedger.tax || 0) },
@@ -465,7 +471,7 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
     ],
     onlineFoodRows: [
       { label: "Jumlah Produk Terjual", value: formatNumber(data.onlineFood.productSoldCount || 0) },
-      { label: "Total Pesanan", value: `${formatNumber(data.onlineFood.orderCount || 0)} Pesanan` },
+      { label: "Total Pesanan", value: `${formatNumber(getOrderCountByBlock(data.onlineFood))} Pesanan` },
       { label: "Total Produk Terjual", value: formatCurrency(data.onlineFood.productSoldTotal || 0) },
       { label: "Diskon", value: formatCurrency(data.onlineFood.discount || 0, true), negative: true },
       { label: "Platform Fee", value: formatCurrency(data.onlineFood.platformFee || 0) },
@@ -709,7 +715,7 @@ function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
     { label: "Jumlah Item Terjual", value: formatNumber(c.productSoldCount || 0), key: "cmp-items" },
     {
       label: "Jumlah Transaksi",
-      value: `${formatNumber(c.orderCount || 0)} Pesanan`,
+      value: `${formatNumber(getOrderCountByBlock(c))} Pesanan`,
       key: "cmp-orders",
       details: [
         { label: "Pesanan General", value: formatNumber(c.orderGeneralCount || 0) },

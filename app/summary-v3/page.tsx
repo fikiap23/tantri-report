@@ -26,6 +26,7 @@ import {
   formatCurrency,
   formatDateForInput,
   formatNumber,
+  getOrderCountByBlock,
 } from '@/lib/report-calculations'
 
 const accent = 'text-[#c62828]'
@@ -634,7 +635,7 @@ export default function SummaryV3Page() {
                         isOrder || isProduct
                           ? (row.hint as string | undefined) ||
                             (isOrder
-                              ? `${formatNumber(data.sales.orderCount || 0)} Pesanan`
+                              ? `${formatNumber(getOrderCountByBlock(data.sales))} Pesanan`
                               : undefined)
                           : row.hint
                       }
@@ -887,7 +888,7 @@ export default function SummaryV3Page() {
                     <div key={key}>
                       <RowLine
                         label="Jumlah Transaksi"
-                        sublabel={`${formatNumber(data.onlineFood.orderCount || 0)} Pesanan`}
+                        sublabel={`${formatNumber(getOrderCountByBlock(data.onlineFood))} Pesanan`}
                         link={hasDetails}
                         onLinkClick={() =>
                           hasDetails &&
@@ -1042,7 +1043,7 @@ export default function SummaryV3Page() {
                     <div key={key}>
                       <RowLine
                         label="Jumlah Transaksi"
-                        sublabel={`${formatNumber(data.cityLedger.orderCount || 0)} Pesanan`}
+                        sublabel={`${formatNumber(getOrderCountByBlock(data.cityLedger))} Pesanan`}
                         link={hasDetails}
                         onLinkClick={() =>
                           hasDetails &&
