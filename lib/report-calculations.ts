@@ -89,6 +89,30 @@ export type WalletExpense = {
   deposit?: number;
 };
 
+/** Pecahan tunai dompet operasional (manual vs penjualan). */
+export type CashWalletDeposit = {
+  manualTransaction: number;
+  orderTransaction: number;
+};
+
+export type DepositWalletDeposit = {
+  totalDepositCash: number;
+  totalDepositDebit: number;
+  totalDepositQRStatic: number;
+  totalDepositEWallet: number;
+  totalDepositManualTransfer: number;
+  countDepositCash: number;
+  countDepositDebit: number;
+  countDepositQRStatic: number;
+  countDepositEWallet: number;
+  countDepositManualTransfer: number;
+};
+
+export type DepositWallet = {
+  deposit: DepositWalletDeposit;
+  totalWithdraw: number;
+};
+
 export type SummaryData = {
   sales: SalesBlock;
   onlineFood: SalesBlock;
@@ -111,7 +135,46 @@ export type SummaryData = {
   walletIncome: WalletIncome;
   walletExpense: WalletExpense;
   loss: number;
+  /** Dipotong dari total pendapatan kotor (setelah fee). */
+  totalDepositDeduction?: number;
+  cashWalletDeposit?: CashWalletDeposit;
+  depositWallet?: DepositWallet;
 };
+
+function totalDepositIncomeFromWallet(data: SummaryData): number {
+  const dep = data.depositWallet?.deposit;
+  if (dep) {
+    return (
+      (dep.totalDepositCash || 0) +
+      (dep.totalDepositDebit || 0) +
+      (dep.totalDepositQRStatic || 0) +
+      (dep.totalDepositEWallet || 0) +
+      (dep.totalDepositManualTransfer || 0)
+    );
+  }
+  return data.walletIncome.depositAmount ?? 0;
+}
+
+function totalDepositIncomeCountFromWallet(data: SummaryData): number {
+  const dep = data.depositWallet?.deposit;
+  if (dep) {
+    return (
+      (dep.countDepositCash || 0) +
+      (dep.countDepositDebit || 0) +
+      (dep.countDepositQRStatic || 0) +
+      (dep.countDepositEWallet || 0) +
+      (dep.countDepositManualTransfer || 0)
+    );
+  }
+  return data.walletIncome.depositCount ?? 0;
+}
+
+function walletExpenseDepositAmount(data: SummaryData): number {
+  if (typeof data.walletExpense.deposit === "number") {
+    return data.walletExpense.deposit;
+  }
+  return data.depositWallet?.totalWithdraw ?? 0;
+}
 
 // --- Env & format ---
 
@@ -131,8 +194,23 @@ export function formatCurrency(num: number, showNegativeStyle = false) {
   return value;
 }
 
+/** YYYY-MM-DD for `<input type="date">` — always uses the user's local calendar day (not UTC). */
 export function formatDateForInput(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function addDaysToIsoDate(isoDate: string, days: number) {
+  const parts = isoDate.split("-").map(Number);
+  const y = parts[0];
+  const mo = parts[1];
+  const da = parts[2];
+  if (!y || !mo || !da) return isoDate;
+  const base = new Date(y, mo - 1, da);
+  base.setDate(base.getDate() + days);
+  return formatDateForInput(base);
 }
 
 // --- Angka inti (dipakai membangun baris) ---
@@ -218,8 +296,16 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.onlineFood?.xenditFee || 0) +
     (data.compliment?.xenditFee || 0);
 
+  const totalDepositDeduction = Number(data.totalDepositDeduction ?? 0);
+
   const totalGrossSales =
-    grossSales + grossSalesOnlineFood + grossCityLedger - totalPlatformFee - totalMultipriceFee - totalXenditFee;
+    grossSales +
+    grossSalesOnlineFood +
+    grossCityLedger -
+    totalPlatformFee -
+    totalMultipriceFee -
+    totalXenditFee -
+    totalDepositDeduction;
 
   const grossRevenue = totalGrossSales;
   const cogs =
@@ -237,6 +323,8 @@ function computeMetrics(data: SummaryData): ReportMetrics {
   const loss = data?.loss || 0;
   const totalNetRevenue = totalSalesRevenue - loss;
 
+  const depositIncomeTotal = totalDepositIncomeFromWallet(data);
+
   const totalWalletIncome =
     (data.walletIncome.cashAmount || 0) +
     (data.walletIncome.nonCashAmount || 0) +
@@ -245,7 +333,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.walletIncome.manualTransferAmount || 0) +
     (data.walletIncome.onlineFoodAmount || 0) +
     (data.walletIncome.cityLedgerAmount || 0) +
-    (data.walletIncome.depositAmount || 0);
+    depositIncomeTotal;
 
   const totalWalletExpense =
     (data.walletExpense.cash || 0) +
@@ -255,7 +343,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.walletExpense.manualTransfer || 0) +
     (data.walletExpense.cityLedger || 0) +
     (data.walletExpense.onlineFood || 0) +
-    (data.walletExpense.deposit || 0);
+    walletExpenseDepositAmount(data);
 
   return {
     grossSales,
@@ -383,6 +471,11 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       { label: "Platform Fee", value: formatCurrency(m.totalPlatformFee, true), negative: true, hint: "Lihat Selengkapnya" },
       { label: "Multiprice Fee", value: formatCurrency(m.totalMultipriceFee, true), negative: true },
       { label: "Xendit Fee", value: formatCurrency(m.totalXenditFee, true), negative: true, hint: "Lihat Selengkapnya" },
+      {
+        label: "Potongan Deposit",
+        value: formatCurrency(data.totalDepositDeduction ?? 0, true),
+        negative: true,
+      },
       { label: "Total Pendapatan Kotor", value: formatCurrency(m.totalGrossSales) },
     ],
     incomeRows: [
@@ -410,7 +503,11 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       { label: "Transfer Manual", value: formatCurrency(data.walletIncome.manualTransferAmount || 0), hint: `${formatNumber(data.walletIncome.manualTransferCount || 0)} Transaksi` },
       { label: "Online Food", value: formatCurrency(data.walletIncome.onlineFoodAmount || 0), hint: `${formatNumber(data.walletIncome.onlineFoodCount || 0)} Transaksi` },
       { label: "City Ledger", value: formatCurrency(data.walletIncome.cityLedgerAmount || 0), hint: `${formatNumber(data.walletIncome.cityLedgerCount || 0)} Transaksi` },
-      { label: "Deposit", value: formatCurrency(data.walletIncome.depositAmount || 0), hint: `${formatNumber(data.walletIncome.depositCount || 0)} Transaksi` },
+      {
+        label: "Deposit",
+        value: formatCurrency(totalDepositIncomeFromWallet(data)),
+        hint: `${formatNumber(totalDepositIncomeCountFromWallet(data))} Transaksi`,
+      },
     ],
     walletExpenseRows: [
       { label: "Tunai", value: formatCurrency(data.walletExpense.cash || 0, true), negative: true },
@@ -420,7 +517,7 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       { label: "Transfer Manual", value: formatCurrency(data.walletExpense.manualTransfer || 0, true), negative: true },
       { label: "City Ledger", value: formatCurrency(data.walletExpense.cityLedger || 0, true), negative: true },
       { label: "Online Food", value: formatCurrency(data.walletExpense.onlineFood || 0, true), negative: true },
-      { label: "Deposit", value: formatCurrency(data.walletExpense.deposit || 0, true), negative: true },
+      { label: "Deposit", value: formatCurrency(walletExpenseDepositAmount(data), true), negative: true },
     ],
   };
 }
@@ -529,16 +626,47 @@ export function calculateReportV1(data: SummaryData) {
 
   const walletIncomeExpandableRows: ExpandableMetricRow[] = sections.walletIncomeRows.map((row) => {
     if (row.label === "Tunai") {
+      const manual = data.cashWalletDeposit?.manualTransaction ?? 0;
+      const order = data.cashWalletDeposit?.orderTransaction ?? data.walletIncome.cashAmount ?? 0;
       return {
         ...row,
         key: "wallet-income-cash",
         details: [
-          { label: "Pemasukan Manual", value: formatCurrency(0) },
-          { label: "Pemasukan Penjualan", value: formatCurrency(data.walletIncome.cashAmount || 0) },
+          { label: "Pemasukan Manual", value: formatCurrency(manual) },
+          { label: "Pemasukan Penjualan", value: formatCurrency(order) },
         ],
       };
     }
     if (row.label === "Deposit") {
+      const dep = data.depositWallet?.deposit;
+      if (dep) {
+        return {
+          ...row,
+          key: "wallet-income-deposit",
+          details: [
+            {
+              label: `Tunai x ${formatNumber(dep.countDepositCash)} Transaksi`,
+              value: formatCurrency(dep.totalDepositCash || 0),
+            },
+            {
+              label: `Debit x ${formatNumber(dep.countDepositDebit)} Transaksi`,
+              value: formatCurrency(dep.totalDepositDebit || 0),
+            },
+            {
+              label: `QRIS Static x ${formatNumber(dep.countDepositQRStatic)} Transaksi`,
+              value: formatCurrency(dep.totalDepositQRStatic || 0),
+            },
+            {
+              label: `E-Wallet x ${formatNumber(dep.countDepositEWallet)} Transaksi`,
+              value: formatCurrency(dep.totalDepositEWallet || 0),
+            },
+            {
+              label: `Transfer Manual x ${formatNumber(dep.countDepositManualTransfer)} Transaksi`,
+              value: formatCurrency(dep.totalDepositManualTransfer || 0),
+            },
+          ],
+        };
+      }
       const depositCount = data.walletIncome.depositCount || 0;
       return {
         ...row,
@@ -619,12 +747,14 @@ function revenueExpandableRowsV2(revenueRows: MetricRow[], data: SummaryData): E
 function walletIncomeExpandableRowsV2(walletIncomeRows: MetricRow[], data: SummaryData): ExpandableMetricRow[] {
   return walletIncomeRows.map((row) => {
     if (row.label === "Tunai") {
+      const manual = data.cashWalletDeposit?.manualTransaction ?? 0;
+      const order = data.cashWalletDeposit?.orderTransaction ?? data.walletIncome.cashAmount ?? 0;
       return {
         ...row,
         key: "wallet-income-cash",
         details: [
-          { label: "Pemasukan Manual", value: formatCurrency(0) },
-          { label: "Pemasukan Penjualan", value: formatCurrency(data.walletIncome.cashAmount || 0) },
+          { label: "Pemasukan Manual", value: formatCurrency(manual) },
+          { label: "Pemasukan Penjualan", value: formatCurrency(order) },
         ],
       };
     }
@@ -636,6 +766,35 @@ function walletIncomeExpandableRowsV2(walletIncomeRows: MetricRow[], data: Summa
       };
     }
     if (row.label === "Deposit") {
+      const dep = data.depositWallet?.deposit;
+      if (dep) {
+        return {
+          ...row,
+          key: "wallet-income-deposit",
+          details: [
+            {
+              label: `Tunai x ${formatNumber(dep.countDepositCash)} Transaksi`,
+              value: formatCurrency(dep.totalDepositCash || 0),
+            },
+            {
+              label: `Debit x ${formatNumber(dep.countDepositDebit)} Transaksi`,
+              value: formatCurrency(dep.totalDepositDebit || 0),
+            },
+            {
+              label: `QRIS Static x ${formatNumber(dep.countDepositQRStatic)} Transaksi`,
+              value: formatCurrency(dep.totalDepositQRStatic || 0),
+            },
+            {
+              label: `E-Wallet x ${formatNumber(dep.countDepositEWallet)} Transaksi`,
+              value: formatCurrency(dep.totalDepositEWallet || 0),
+            },
+            {
+              label: `Transfer Manual x ${formatNumber(dep.countDepositManualTransfer)} Transaksi`,
+              value: formatCurrency(dep.totalDepositManualTransfer || 0),
+            },
+          ],
+        };
+      }
       const depositCount = data.walletIncome.depositCount || 0;
       return {
         ...row,
@@ -690,8 +849,9 @@ export function calculateReportV2(data: SummaryData) {
 // --- Fetch ---
 
 export async function fetchSaleSummaryRange(startDate: string, endDate: string): Promise<SummaryData> {
+  const adjustedEndDate = addDaysToIsoDate(endDate, 1);
   const response = await fetch(
-    `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${endDate}`,
+    `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${adjustedEndDate}`,
     {
       headers: {
         "Content-Type": "application/json",

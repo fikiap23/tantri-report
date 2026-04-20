@@ -1416,7 +1416,7 @@ export default function SummaryV3Page() {
                 })}
               <RowLine
                 label="Potongan Deposit"
-                value={formatCurrency(0, true)}
+                value={formatCurrency(data.totalDepositDeduction ?? 0, true)}
                 valueClassName="text-red-600"
               />
               <DottedRule />
