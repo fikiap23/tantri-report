@@ -4,14 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-const V3_PATH = "/summary-v3";
+const V2_PATH = "/summary-v2";
 const BACKOFFICE_PATH = "/backoffice-dashboard";
 
 export function ReportViewToggle({ className }: { className?: string }) {
   const pathname = usePathname();
-  const isV3 = pathname === V3_PATH;
+  const isV2 = pathname === V2_PATH;
   const isBackoffice = pathname === BACKOFFICE_PATH;
-  const isClassic = !isV3 && !isBackoffice;
+  const isClassic = !isV2 && !isBackoffice;
 
   return (
     <div
@@ -32,13 +32,13 @@ export function ReportViewToggle({ className }: { className?: string }) {
         Klasik
       </Link>
       <Link
-        href={V3_PATH}
+        href={V2_PATH}
         className={cn(
           "rounded-md px-3 py-1.5 font-medium transition-colors",
-          isV3 ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-600 hover:text-neutral-900",
+          isV2 ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-600 hover:text-neutral-900",
         )}
       >
-        Baru (v3)
+        Baru (v2)
       </Link>
       <Link
         href={BACKOFFICE_PATH}

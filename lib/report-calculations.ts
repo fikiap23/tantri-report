@@ -707,7 +707,7 @@ export function calculateReportV1(data: SummaryData) {
   };
 }
 
-// --- Public: UI summary v3 ---
+// --- Public: UI summary v2 ---
 
 function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
   const c = data.compliment;

@@ -220,7 +220,7 @@ function CollapsiblePlatformFeeCard({
   )
 }
 
-function V3ReservationBlock({
+function V2ReservationBlock({
   reservation,
 }: {
   reservation: SummaryData['reservation']
@@ -349,7 +349,7 @@ function V3ReservationBlock({
   )
 }
 
-export default function SummaryV3Page() {
+export default function SummaryV2Page() {
   const now = new Date()
   const [startDate, setStartDate] = useState(
     formatDateForInput(new Date(now.getFullYear(), now.getMonth(), 1)),
@@ -412,7 +412,7 @@ export default function SummaryV3Page() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `laporan-summary-v3-${startDate}_${endDate}.json`
+    a.download = `laporan-summary-v2-${startDate}_${endDate}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -439,11 +439,11 @@ export default function SummaryV3Page() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="min-w-[150px] print:hidden">
-                  <Label htmlFor="v3-scopeType" className="mb-1 block text-xs">
+                  <Label htmlFor="v2-scopeType" className="mb-1 block text-xs">
                     Scope Type
                   </Label>
                   <select
-                    id="v3-scopeType"
+                    id="v2-scopeType"
                     value={scopeType}
                     onChange={(e) =>
                       setScopeType(e.target.value as ReportScopeType)
@@ -460,13 +460,13 @@ export default function SummaryV3Page() {
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <div className="grid gap-2 sm:grid-cols-2 print:hidden">
                 <div className="space-y-1">
-                  <Label htmlFor="v3-start" className="text-xs">
+                  <Label htmlFor="v2-start" className="text-xs">
                     Mulai
                   </Label>
                   <div className="relative">
                     <CalendarDays className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
                     <Input
-                      id="v3-start"
+                      id="v2-start"
                       type="date"
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
@@ -475,13 +475,13 @@ export default function SummaryV3Page() {
                   </div>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="v3-end" className="text-xs">
+                  <Label htmlFor="v2-end" className="text-xs">
                     Akhir
                   </Label>
                   <div className="relative">
                     <CalendarDays className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-neutral-400" />
                     <Input
-                      id="v3-end"
+                      id="v2-end"
                       type="date"
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
@@ -870,7 +870,7 @@ export default function SummaryV3Page() {
               </div>
             </SectionShell>
 
-            <V3ReservationBlock reservation={data.reservation} />
+            <V2ReservationBlock reservation={data.reservation} />
 
             {/* Online Food */}
             <SectionShell title="Online Food">
