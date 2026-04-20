@@ -37,6 +37,10 @@ export type SalesBlock = {
   orderCount: number;
   orderGeneralCount?: number;
   orderSplitBillCount?: number;
+  orderDineInCount?: number;
+  orderTakeAwayCount?: number;
+  orderDeliveryCount?: number;
+  orderCancelledCount?: number;
   productSoldTotal: number;
   productNormalSoldTotal?: number;
   productCustomAmountSoldTotal?: number;

@@ -45,22 +45,6 @@ const CARD_CLASS = "rounded border border-[#e5e7eb] bg-white p-4";
 
 const DUMMY_FIELDS: DummyField[] = [
   {
-    key: "sales.orderDineInCount",
-    requestToBE: "Jumlah transaksi Makan Di Tempat per range tanggal",
-  },
-  {
-    key: "sales.orderTakeAwayCount",
-    requestToBE: "Jumlah transaksi Take Away per range tanggal",
-  },
-  {
-    key: "sales.orderDeliveryCount",
-    requestToBE: "Jumlah transaksi Pesan Antar per range tanggal",
-  },
-  {
-    key: "sales.orderCancelledCount",
-    requestToBE: "Jumlah transaksi dibatalkan per range tanggal",
-  },
-  {
     key: "walletExpense.detailBreakdown",
     requestToBE: "Breakdown pengeluaran dompet per channel + jumlah transaksi",
   },
@@ -167,19 +151,22 @@ export default function BackofficeDashboardPage() {
     if (!data || !report) return null;
 
     const transactionRows: RowItem[] = [
-      { label: "Makan Di Tempat", value: formatNumber(0) },
-      { label: "Take Away", value: formatNumber(0) },
-      { label: "Pesan Antar", value: formatNumber(0) },
+      { label: "Makan Di Tempat", value: formatNumber(data.sales.orderDineInCount || 0) },
+      { label: "Take Away", value: formatNumber(data.sales.orderTakeAwayCount || 0) },
+      { label: "Pesan Antar", value: formatNumber(data.sales.orderDeliveryCount || 0) },
       { label: "Online Food", value: formatNumber(data.onlineFood.orderCount || 0) },
       { label: "Compliment", value: formatNumber(data.compliment.orderCount || 0) },
     ];
 
-    const totalOrders = (data.sales.orderCount || 0) + (data.cityLedger.orderCount || 0) + (data.onlineFood.orderCount || 0);
+    const totalOrders =
+      (data.sales.orderCount || 0) + (data.cityLedger.orderCount || 0) + (data.onlineFood.orderCount || 0) + (data.compliment.orderCount || 0);
+    const cancelledOrders = (data.sales.orderCancelledCount || 0) + (data.cityLedger.orderCancelledCount || 0) + (data.onlineFood.orderCancelledCount || 0);
+    const successOrders = Math.max(totalOrders - cancelledOrders, 0);
 
     return {
       totalOrders,
-      successOrders: totalOrders,
-      cancelledOrders: 0,
+      successOrders,
+      cancelledOrders,
       grossSalesRows: [
         { label: "Total Produk Terjual", value: formatCurrency(data.sales.productSoldTotal || 0) },
         { label: "Total Custom Amount", value: formatCurrency(data.sales.productCustomAmountSoldTotal || 0) },
