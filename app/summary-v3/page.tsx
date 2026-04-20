@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { ReportViewToggle } from '@/components/report-view-toggle'
 import { cn } from '@/lib/utils'
 import {
+  ReportScopeType,
   type SummaryData,
   REPORT_BEARER_TOKEN,
   calculateReportV2,
@@ -358,6 +359,7 @@ export default function SummaryV3Page() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [data, setData] = useState<SummaryData | null>(null)
+  const [scopeType, setScopeType] = useState<ReportScopeType>(ReportScopeType.MERCHANT)
 
   const report = useMemo(
     () => (data ? calculateReportV2(data) : null),
@@ -382,7 +384,7 @@ export default function SummaryV3Page() {
     setLoading(true)
     setError('')
     try {
-      const summary = await fetchSaleSummaryRange(startDate, endDate)
+      const summary = await fetchSaleSummaryRange(startDate, endDate, scopeType)
       setData(summary)
     } catch (err) {
       setData(null)
@@ -434,7 +436,25 @@ export default function SummaryV3Page() {
                   <span className={cn('font-medium', accent)}>{subtitle}</span>
                 </p>
               </div>
-              <ReportViewToggle />
+              <div className="flex items-center gap-2">
+                <div className="min-w-[150px] print:hidden">
+                  <Label htmlFor="v3-scopeType" className="mb-1 block text-xs">
+                    Scope Type
+                  </Label>
+                  <select
+                    id="v3-scopeType"
+                    value={scopeType}
+                    onChange={(e) =>
+                      setScopeType(e.target.value as ReportScopeType)
+                    }
+                    className="h-9 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm"
+                  >
+                    <option value={ReportScopeType.MERCHANT}>{ReportScopeType.MERCHANT}</option>
+                    <option value={ReportScopeType.OFFICE}>{ReportScopeType.OFFICE}</option>
+                  </select>
+                </div>
+                <ReportViewToggle />
+              </div>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <div className="grid gap-2 sm:grid-cols-2 print:hidden">

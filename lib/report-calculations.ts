@@ -11,6 +11,11 @@ export type ApiResponse = {
   data: SummaryData;
 };
 
+export enum ReportScopeType {
+  MERCHANT = "MERCHANT",
+  OFFICE = "OFFICE",
+}
+
 export type MetricRow = {
   label: string;
   value: string;
@@ -852,10 +857,14 @@ export function calculateReportV2(data: SummaryData) {
 
 // --- Fetch ---
 
-export async function fetchSaleSummaryRange(startDate: string, endDate: string): Promise<SummaryData> {
+export async function fetchSaleSummaryRange(
+  startDate: string,
+  endDate: string,
+  scopeType: ReportScopeType = ReportScopeType.MERCHANT,
+): Promise<SummaryData> {
   const adjustedEndDate = addDaysToIsoDate(endDate, 1);
   const response = await fetch(
-    `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${adjustedEndDate}`,
+    `${REPORT_BASE_URL}/v2/report/sale/summary?startDate=${startDate}&endDate=${adjustedEndDate}&scopeType=${scopeType}`,
     {
       headers: {
         "Content-Type": "application/json",

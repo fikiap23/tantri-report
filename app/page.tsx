@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ReportViewToggle } from "@/components/report-view-toggle";
 import {
+  ReportScopeType,
   type ExpandableMetricRow,
   type MetricRow,
   type ReservationState,
@@ -223,6 +224,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<SummaryData | null>(null);
+  const [scopeType, setScopeType] = useState<ReportScopeType>(ReportScopeType.MERCHANT);
 
   const report = useMemo(() => (data ? calculateReportV1(data) : null), [data]);
 
@@ -235,7 +237,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     try {
-      const summary = await fetchSaleSummaryRange(startDate, endDate);
+      const summary = await fetchSaleSummaryRange(startDate, endDate, scopeType);
       setData(summary);
     } catch (err) {
       setData(null);
@@ -261,7 +263,23 @@ export default function Home() {
                   </span>
                 </p>
               </div>
-              <ReportViewToggle />
+              <div className="flex items-center gap-2">
+                <div className="min-w-[150px]">
+                  <Label htmlFor="scopeType" className="mb-1 block text-xs">
+                    Scope Type
+                  </Label>
+                  <select
+                    id="scopeType"
+                    value={scopeType}
+                    onChange={(e) => setScopeType(e.target.value as ReportScopeType)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value={ReportScopeType.MERCHANT}>{ReportScopeType.MERCHANT}</option>
+                    <option value={ReportScopeType.OFFICE}>{ReportScopeType.OFFICE}</option>
+                  </select>
+                </div>
+                <ReportViewToggle />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">

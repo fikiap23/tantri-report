@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReportViewToggle } from "@/components/report-view-toggle";
 import {
+  ReportScopeType,
   REPORT_BEARER_TOKEN,
   calculateReportV2,
   fetchSaleSummaryRange,
@@ -144,6 +145,7 @@ export default function BackofficeDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState<SummaryData | null>(null);
+  const [scopeType, setScopeType] = useState<ReportScopeType>(ReportScopeType.MERCHANT);
 
   const report = useMemo(() => (data ? calculateReportV2(data) : null), [data]);
 
@@ -255,7 +257,7 @@ export default function BackofficeDashboardPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetchSaleSummaryRange(startDate, endDate);
+      const response = await fetchSaleSummaryRange(startDate, endDate, scopeType);
       setData(response);
     } catch (err) {
       setData(null);
@@ -275,6 +277,20 @@ export default function BackofficeDashboardPage() {
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <ReportViewToggle />
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="bo-scopeType">
+                Scope Type
+              </Label>
+              <select
+                id="bo-scopeType"
+                value={scopeType}
+                onChange={(e) => setScopeType(e.target.value as ReportScopeType)}
+                className="h-9 rounded border border-neutral-300 bg-white px-3 text-sm"
+              >
+                <option value={ReportScopeType.MERCHANT}>{ReportScopeType.MERCHANT}</option>
+                <option value={ReportScopeType.OFFICE}>{ReportScopeType.OFFICE}</option>
+              </select>
+            </div>
             <div className="space-y-1">
               <Label className="text-xs">Preset</Label>
               <select
