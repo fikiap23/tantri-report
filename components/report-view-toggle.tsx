@@ -6,14 +6,16 @@ import { cn } from "@/lib/utils";
 
 const V2_PATH = "/summary-v2";
 const V2_SHIFT_PATH = "/summary-v2-shift";
+const SHIFT_PER_USER_PATH = "/laporan-per-shift";
 const BACKOFFICE_PATH = "/backoffice-dashboard";
 
 export function ReportViewToggle({ className }: { className?: string }) {
   const pathname = usePathname();
   const isV2 = pathname === V2_PATH;
   const isV2Shift = pathname === V2_SHIFT_PATH;
+  const isShiftPerUser = pathname === SHIFT_PER_USER_PATH;
   const isBackoffice = pathname === BACKOFFICE_PATH;
-  const isClassic = !isV2 && !isV2Shift && !isBackoffice;
+  const isClassic = !isV2 && !isV2Shift && !isShiftPerUser && !isBackoffice;
 
   return (
     <div
@@ -50,6 +52,15 @@ export function ReportViewToggle({ className }: { className?: string }) {
         )}
       >
         Shift (v2)
+      </Link>
+      <Link
+        href={SHIFT_PER_USER_PATH}
+        className={cn(
+          "rounded-md px-3 py-1.5 font-medium transition-colors",
+          isShiftPerUser ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-600 hover:text-neutral-900",
+        )}
+      >
+        Per Shift
       </Link>
       <Link
         href={BACKOFFICE_PATH}

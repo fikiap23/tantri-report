@@ -167,6 +167,15 @@ export type WaitingTransaction = {
   date: string;
 };
 
+export type ShiftUserSummaryItem = {
+  name: string;
+  nameShift: string;
+  timeShift: string;
+  isOverDay: boolean;
+  debtOrders: unknown[];
+  report: SummaryData;
+};
+
 function totalDepositIncomeFromWallet(data: SummaryData): number {
   const dep = data.depositWallet?.deposit;
   if (dep) {
@@ -1033,6 +1042,29 @@ export async function fetchShiftSaleSummaryRange(
   const json = (await response.json()) as ApiResponse;
   if (!json?.isSuccess || !json?.data) {
     throw new Error("Gagal mengambil data report shift.");
+  }
+  return json.data;
+}
+
+export async function fetchShiftSaleSummaryByUserDate(
+  date: string,
+): Promise<ShiftUserSummaryItem[]> {
+  const response = await fetch(
+    `${REPORT_BASE_URL}/v2/report/shift/sale/summary/by-user?date=${date}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(REPORT_BEARER_TOKEN ? { Authorization: `Bearer ${REPORT_BEARER_TOKEN}` } : {}),
+      },
+    },
+  );
+  const json = (await response.json()) as {
+    isSuccess: boolean;
+    message: string;
+    data?: ShiftUserSummaryItem[];
+  };
+  if (!json?.isSuccess || !Array.isArray(json?.data)) {
+    throw new Error("Gagal mengambil data laporan per shift.");
   }
   return json.data;
 }
