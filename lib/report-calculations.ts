@@ -129,6 +129,8 @@ export type DepositWallet = {
 };
 
 export type SummaryData = {
+  nameCashiers?: string[];
+  waitingTransactions?: WaitingTransaction[];
   sales: SalesBlock;
   onlineFood: SalesBlock;
   cityLedger: SalesBlock;
@@ -154,6 +156,15 @@ export type SummaryData = {
   totalDepositDeduction?: number;
   cashWalletDeposit?: CashWalletDeposit;
   depositWallet?: DepositWallet;
+};
+
+export type WaitingTransaction = {
+  createdBy: string;
+  customerName: string;
+  totalPriceProduct: number;
+  totalPrice: number;
+  fee: number;
+  date: string;
 };
 
 function totalDepositIncomeFromWallet(data: SummaryData): number {
@@ -1001,6 +1012,27 @@ export async function fetchSaleSummaryRange(
   const json = (await response.json()) as ApiResponse;
   if (!json?.isSuccess || !json?.data) {
     throw new Error("Gagal mengambil data report.");
+  }
+  return json.data;
+}
+
+export async function fetchShiftSaleSummaryRange(
+  startDate: string,
+  endDate: string,
+): Promise<SummaryData> {
+  const adjustedEndDate = addDaysToIsoDate(endDate, 1);
+  const response = await fetch(
+    `${REPORT_BASE_URL}/v2/report/shift/sale/summary?startDate=${startDate}&endDate=${adjustedEndDate}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(REPORT_BEARER_TOKEN ? { Authorization: `Bearer ${REPORT_BEARER_TOKEN}` } : {}),
+      },
+    },
+  );
+  const json = (await response.json()) as ApiResponse;
+  if (!json?.isSuccess || !json?.data) {
+    throw new Error("Gagal mengambil data report shift.");
   }
   return json.data;
 }
