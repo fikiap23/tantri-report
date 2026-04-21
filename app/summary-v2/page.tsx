@@ -158,32 +158,63 @@ function CollapsiblePlatformFeeCard({
   defaultOpen?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    sales: true,
+    onlineFood: true,
+    cityLedger: true,
+  })
   const details = useMemo(() => {
-    const platformFeeMap = new Map<number, number>()
-    const all = [
-      ...data.platformFeeBreakdown.sales,
-      ...data.platformFeeBreakdown.onlineFood,
-      ...data.platformFeeBreakdown.cityLedger,
-    ]
-    for (const item of all) {
-      platformFeeMap.set(
-        item.price,
-        (platformFeeMap.get(item.price) || 0) + (item.count || 0),
-      )
+    function buildChannelRows(
+      label: string,
+      key: 'sales' | 'onlineFood' | 'cityLedger',
+      items: SummaryData['platformFeeBreakdown']['sales'],
+    ) {
+      const hasApiData = Array.isArray(items) && items.length > 0
+      const rows = hasApiData
+        ? items.map((item) => ({
+            label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
+            value: formatCurrency((item.price || 0) * (item.count || 0)),
+          }))
+        : [{ label: `Breakdown ${label} (belum ada di API)`, value: '-' }]
+      const total = hasApiData
+        ? items.reduce(
+            (sum, item) => sum + (item.price || 0) * (item.count || 0),
+            0,
+          )
+        : 0
+      return { key, label, rows, total, hasApiData }
     }
-    const rows = [...platformFeeMap.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([price, count]) => ({
-        label: `${formatNumber(price)} x ${formatNumber(count)} Transaksi`,
-        value: formatCurrency(price * count, true),
-      }))
-    if (data.platformFeeBreakdown.compliment) {
-      rows.push({
-        label: 'Compliment',
-        value: formatCurrency(data.platformFeeBreakdown.compliment, true),
-      })
+
+    const sales = buildChannelRows(
+      'Penjualan',
+      'sales',
+      data.platformFeeBreakdown.sales,
+    )
+    const onlineFood = buildChannelRows(
+      'Online Food',
+      'onlineFood',
+      data.platformFeeBreakdown.onlineFood,
+    )
+    const cityLedger = buildChannelRows(
+      'City Ledger',
+      'cityLedger',
+      data.platformFeeBreakdown.cityLedger,
+    )
+    const complimentValue = data.platformFeeBreakdown.compliment
+    const compliment = {
+      label:
+        typeof complimentValue === 'number'
+          ? 'Platform Fee Compliment'
+          : 'Platform Fee Compliment (belum ada di API)',
+      value:
+        typeof complimentValue === 'number'
+          ? formatCurrency(complimentValue)
+          : '-',
+      total: typeof complimentValue === 'number' ? complimentValue : 0,
     }
-    return rows
+    const total =
+      sales.total + onlineFood.total + cityLedger.total + compliment.total
+    return { sections: [sales, onlineFood, cityLedger], compliment, total }
   }, [data])
 
   return (
@@ -205,15 +236,81 @@ function CollapsiblePlatformFeeCard({
       </button>
       {open && (
         <div className="divide-y divide-neutral-200">
-          {details.map((row, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm"
-            >
-              <span className="text-neutral-600">{row.label}</span>
-              <span className="font-semibold text-red-600">{row.value}</span>
-            </div>
-          ))}
+          {details.sections.map((section) => {
+            const isOpen = expandedSections[section.key] ?? false
+            return (
+              <div key={section.key}>
+                <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedSections((prev) => ({
+                          ...prev,
+                          [section.key]: !isOpen,
+                        }))
+                      }
+                      className="text-neutral-500"
+                    >
+                      {isOpen ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </button>
+                    <span className="font-semibold text-neutral-900">
+                      {`Platform Fee ${section.label}`}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-neutral-900">
+                    {formatCurrency(section.total)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedSections((prev) => ({
+                      ...prev,
+                      [section.key]: !isOpen,
+                    }))
+                  }
+                  className={cn('px-4 pb-1 text-xs font-medium', accent)}
+                >
+                  {isOpen ? 'Sembunyikan' : 'Selengkapnya'}
+                </button>
+                {isOpen && (
+                  <div className="space-y-1 bg-neutral-50/80 px-4 py-2">
+                    {section.rows.map((row, i) => (
+                      <div
+                        key={`${section.key}-${i}`}
+                        className="flex items-center justify-between gap-4 text-sm"
+                      >
+                        <span className="text-neutral-600">{row.label}</span>
+                        <span className="font-medium tabular-nums text-neutral-900">
+                          {row.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+            <span className="text-neutral-600">{details.compliment.label}</span>
+            <span className="font-semibold text-neutral-900">
+              {details.compliment.value}
+            </span>
+          </div>
+          <DottedRule />
+          <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
+            <span className="font-bold text-neutral-900">
+              Total Tagihan Platform Fee
+            </span>
+            <span className="font-bold text-neutral-900">
+              {formatCurrency(details.total)}
+            </span>
+          </div>
         </div>
       )}
     </div>

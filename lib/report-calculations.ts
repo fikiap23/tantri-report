@@ -562,7 +562,12 @@ function getOrderDetails(block: ChannelSlice): MetricRow[] {
   return details;
 }
 
-function getMultipriceProductDetails(block: ChannelSlice): MetricRow[] {
+function getMultipriceProductDetails(
+  block: ChannelSlice,
+  options?: {
+    emptyLabel?: string;
+  },
+): MetricRow[] {
   const details: MetricRow[] = [];
   for (const item of block.multiprices || []) {
     if (!item || typeof item !== "object") continue;
@@ -591,7 +596,7 @@ function getMultipriceProductDetails(block: ChannelSlice): MetricRow[] {
     details.push({ label: normalizedLabel, value: formatCurrency(amount) });
   }
   if (details.length === 0) {
-    details.push({ label: "Harga Bazaar (belum ada di API)", value: "-" });
+    details.push({ label: options?.emptyLabel || "Harga Bazaar (belum ada di API)", value: "-" });
   }
   return details;
 }
@@ -689,10 +694,48 @@ function platformFeeRevenueDetails(data: SummaryData): MetricRow[] {
 
 function placeholderXenditFeeDetails(): MetricRow[] {
   return [
-    { label: "E-Wallet (belum ada di API)", value: "-", negative: true },
-    { label: "QRIS (belum ada di API)", value: "-", negative: true },
-    { label: "VA (belum ada di API)", value: "-", negative: true },
+    { label: "E-Wallet x - Transaksi (belum ada di API)", value: "-", negative: true },
+    { label: "QRIS x - Transaksi (belum ada di API)", value: "-", negative: true },
+    { label: "VA x - Transaksi (belum ada di API)", value: "-", negative: true },
   ];
+}
+
+function multipriceFeeDetails(data: SummaryData): MetricRow[] {
+  const rows: MetricRow[] = [];
+  for (const item of data.onlineFood.multiprices || []) {
+    if (!item || typeof item !== "object") continue;
+    const rawName = (item.name as string | undefined) || "";
+    const fee = Number((item.fee as number | undefined) ?? 0);
+    const count = Number((item.nTransaction as number | undefined) ?? 0);
+    if (!rawName) continue;
+    if (fee <= 0 && count <= 0) continue;
+    const totalFee = fee * Math.max(count || 1, 1);
+    rows.push({
+      label: `${toTitleFoodChannel(rawName)} Fee x ${formatNumber(count || 0)} Transaksi`,
+      value: formatCurrency(totalFee, true),
+      negative: true,
+    });
+  }
+
+  if (rows.length > 0) return rows;
+
+  const totalMultiprice =
+    (data.sales.multipriceFee || 0) +
+    (data.onlineFood.multipriceFee || 0) +
+    (data.cityLedger.multipriceFee || 0) +
+    (data.compliment.multipriceFee || 0);
+
+  if (totalMultiprice > 0) {
+    return [
+      {
+        label: "Breakdown Multi-Price Fee (belum ada di API)",
+        value: formatCurrency(totalMultiprice, true),
+        negative: true,
+      },
+    ];
+  }
+
+  return [{ label: "Breakdown Multi-Price Fee (belum ada di API)", value: "-", negative: true }];
 }
 
 // --- Public: UI klasik ---
@@ -809,7 +852,7 @@ function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
       key: "cmp-product",
       details: [
         { label: "Harga Normal", value: formatCurrency(c.productNormalSoldTotal || 0) },
-        ...getMultipriceProductDetails(c),
+        ...getMultipriceProductDetails(c, { emptyLabel: "Harga Compliment (belum ada di API)" }),
         { label: "Harga Custom Amount", value: formatCurrency(c.productCustomAmountSoldTotal || 0) },
       ],
     },
@@ -826,12 +869,7 @@ function revenueExpandableRowsV2(revenueRows: MetricRow[], data: SummaryData): E
       return {
         ...row,
         key: "revenue-multiprice",
-        details: [
-          { label: "Penjualan", value: formatCurrency(data.sales.multipriceFee || 0, true), negative: true },
-          { label: "Online Food", value: formatCurrency(data.onlineFood.multipriceFee || 0, true), negative: true },
-          { label: "City Ledger", value: formatCurrency(data.cityLedger.multipriceFee || 0, true), negative: true },
-          { label: "Compliment", value: formatCurrency(data.compliment.multipriceFee || 0, true), negative: true },
-        ],
+        details: multipriceFeeDetails(data),
       };
     }
     if (row.label === "Xendit Fee") {
