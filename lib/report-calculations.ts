@@ -539,8 +539,94 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
 
 type ChannelSlice = Pick<
   SalesBlock,
-  "orderGeneralCount" | "orderSplitBillCount" | "productNormalSoldTotal" | "productCustomAmountSoldTotal"
+  | "orderGeneralCount"
+  | "orderSplitBillCount"
+  | "orderDineInCount"
+  | "orderTakeAwayCount"
+  | "orderDeliveryCount"
+  | "productNormalSoldTotal"
+  | "productCustomAmountSoldTotal"
+  | "multiprices"
 >;
+
+function getOrderDetails(block: ChannelSlice): MetricRow[] {
+  const details: MetricRow[] = [{ label: "Pesanan General", value: formatNumber(block.orderGeneralCount || 0) }];
+  const hasOrderTypeBreakdown =
+    (block.orderDineInCount || 0) > 0 || (block.orderTakeAwayCount || 0) > 0 || (block.orderDeliveryCount || 0) > 0;
+  if (hasOrderTypeBreakdown) {
+    details.push({ label: "Makan di Tempat", value: formatNumber(block.orderDineInCount || 0) });
+    details.push({ label: "Take Away", value: formatNumber(block.orderTakeAwayCount || 0) });
+    details.push({ label: "Pesan Antar", value: formatNumber(block.orderDeliveryCount || 0) });
+  }
+  details.push({ label: "Pesanan Split Bill", value: formatNumber(block.orderSplitBillCount || 0) });
+  return details;
+}
+
+function getMultipriceProductDetails(block: ChannelSlice): MetricRow[] {
+  const details: MetricRow[] = [];
+  for (const item of block.multiprices || []) {
+    if (!item || typeof item !== "object") continue;
+    const labelRaw =
+      (item.name as string | undefined) ||
+      (item.label as string | undefined) ||
+      (item.multipriceName as string | undefined) ||
+      (item.priceName as string | undefined) ||
+      "";
+    const amountRaw =
+      (item.total as number | undefined) ??
+      (item.amount as number | undefined) ??
+      (item.totalAmount as number | undefined) ??
+      (item.productPrice as number | undefined) ??
+      (item.productSoldTotal as number | undefined) ??
+      (item.soldTotal as number | undefined) ??
+      (item.value as number | undefined) ??
+      0;
+    const amount = typeof amountRaw === "number" ? amountRaw : 0;
+    if (amount <= 0) continue;
+    const normalizedLabel = labelRaw
+      ? labelRaw.toLowerCase().startsWith("harga ")
+        ? labelRaw
+        : `Harga ${toTitleFoodChannel(labelRaw)}`
+      : "Harga Lainnya";
+    details.push({ label: normalizedLabel, value: formatCurrency(amount) });
+  }
+  if (details.length === 0) {
+    details.push({ label: "Harga Bazaar (belum ada di API)", value: "-" });
+  }
+  return details;
+}
+
+function toTitleFoodChannel(name: string) {
+  const normalized = name.trim().toLowerCase();
+  if (normalized === "gofood") return "GoFood";
+  if (normalized === "grabfood") return "GrabFood";
+  if (normalized === "shopeefood") return "ShopeeFood";
+  if (!normalized) return "Channel";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function getOnlineFoodWalletDetails(data: SummaryData): MetricRow[] {
+  const details = new Map<string, string>();
+  for (const item of data.onlineFood.multiprices || []) {
+    if (!item || typeof item !== "object") continue;
+    const rawName = (item.name as string | undefined) || "";
+    const key = rawName.trim().toLowerCase();
+    if (!key) continue;
+    const amountRaw =
+      (item.total as number | undefined) ??
+      (item.amount as number | undefined) ??
+      (item.totalAmount as number | undefined) ??
+      (item.productPrice as number | undefined) ??
+      (item.productSoldTotal as number | undefined) ??
+      (item.value as number | undefined);
+    if (typeof amountRaw === "number" && amountRaw >= 0) {
+      details.set(toTitleFoodChannel(key), formatCurrency(amountRaw));
+    } else {
+      details.set(toTitleFoodChannel(key), formatCurrency(0));
+    }
+  }
+  return [...details.entries()].map(([label, value]) => ({ label, value }));
+}
 
 function expandOrderProductChannelRows(
   rows: MetricRow[],
@@ -556,10 +642,7 @@ function expandOrderProductChannelRows(
       return {
         ...row,
         key: keys.orderDetailKey,
-        details: [
-          { label: "Pesanan General", value: formatNumber(block.orderGeneralCount || 0) },
-          { label: "Pesanan Split Bill", value: formatNumber(block.orderSplitBillCount || 0) },
-        ],
+        details: getOrderDetails(block),
       };
     }
     if (row.label === "Total Produk Terjual") {
@@ -568,6 +651,7 @@ function expandOrderProductChannelRows(
         key: keys.productDetailKey,
         details: [
           { label: "Harga Normal", value: formatCurrency(block.productNormalSoldTotal || 0) },
+          ...getMultipriceProductDetails(block),
           { label: "Harga Custom Amount", value: formatCurrency(block.productCustomAmountSoldTotal || 0) },
         ],
       };
@@ -605,9 +689,9 @@ function platformFeeRevenueDetails(data: SummaryData): MetricRow[] {
 
 function placeholderXenditFeeDetails(): MetricRow[] {
   return [
-    { label: "E-Wallet x 0 Transaksi", value: formatCurrency(0, true), negative: true },
-    { label: "QRIS x 0 Transaksi", value: formatCurrency(0, true), negative: true },
-    { label: "VA x 0 Transaksi", value: formatCurrency(0, true), negative: true },
+    { label: "E-Wallet (belum ada di API)", value: "-", negative: true },
+    { label: "QRIS (belum ada di API)", value: "-", negative: true },
+    { label: "VA (belum ada di API)", value: "-", negative: true },
   ];
 }
 
@@ -717,10 +801,7 @@ function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
       label: "Jumlah Transaksi",
       value: `${formatNumber(getOrderCountByBlock(c))} Pesanan`,
       key: "cmp-orders",
-      details: [
-        { label: "Pesanan General", value: formatNumber(c.orderGeneralCount || 0) },
-        { label: "Pesanan Split Bill", value: formatNumber(c.orderSplitBillCount || 0) },
-      ],
+      details: getOrderDetails(c),
     },
     {
       label: "Total Penjualan Produk",
@@ -728,6 +809,7 @@ function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
       key: "cmp-product",
       details: [
         { label: "Harga Normal", value: formatCurrency(c.productNormalSoldTotal || 0) },
+        ...getMultipriceProductDetails(c),
         { label: "Harga Custom Amount", value: formatCurrency(c.productCustomAmountSoldTotal || 0) },
       ],
     },
@@ -777,7 +859,7 @@ function walletIncomeExpandableRowsV2(walletIncomeRows: MetricRow[], data: Summa
       return {
         ...row,
         key: "wallet-income-of",
-        details: [{ label: "Akumulasi Online Food", value: formatCurrency(data.walletIncome.onlineFoodAmount || 0) }],
+        details: getOnlineFoodWalletDetails(data),
       };
     }
     if (row.label === "Deposit") {

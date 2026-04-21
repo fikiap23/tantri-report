@@ -106,11 +106,13 @@ function MetricCard({
   total,
   rows,
   accent,
+  unitLabel = 'Rupiah',
 }: {
   title: string
   total: string
   rows: RowItem[]
   accent?: boolean
+  unitLabel?: string
 }) {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({})
 
@@ -125,7 +127,7 @@ function MetricCard({
       >
         {total}
       </p>
-      <p className="mt-1 text-xs text-neutral-500">Rupiah</p>
+      <p className="mt-1 text-xs text-neutral-500">{unitLabel}</p>
       <div className="mt-4 space-y-1.5">
         {rows.map((row) => {
           const rowKey = `${title}-${row.label}`
@@ -238,11 +240,127 @@ export default function BackofficeDashboardPage() {
       getOrderCountByBlock(data.onlineFood) +
       getOrderCountByBlock(data.compliment)
     const totalOrders = successOrders + cancelledOrders
+    const totalReservations =
+      (data.reservation.waiting.totalReservation || 0) +
+      (data.reservation.accepted.totalReservation || 0) +
+      (data.reservation.succeed.totalReservation || 0) +
+      (data.reservation.failed.totalReservation || 0)
 
     return {
       totalOrders,
       successOrders,
       cancelledOrders,
+      totalReservations,
+      reservationRows: [
+        {
+          label: 'Jumlah Reservasi',
+          value: formatNumber(
+            (data.reservation.waiting.totalReservation || 0) +
+              (data.reservation.accepted.totalReservation || 0) +
+              (data.reservation.succeed.totalReservation || 0) +
+              (data.reservation.failed.totalReservation || 0),
+          ),
+          details: [
+            {
+              label: 'Menunggu',
+              value: formatNumber(data.reservation.waiting.totalReservation || 0),
+            },
+            {
+              label: 'Diterima',
+              value: formatNumber(data.reservation.accepted.totalReservation || 0),
+            },
+            {
+              label: 'Selesai',
+              value: formatNumber(data.reservation.succeed.totalReservation || 0),
+            },
+            {
+              label: 'Dibatalkan',
+              value: formatNumber(data.reservation.failed.totalReservation || 0),
+            },
+          ],
+        },
+        {
+          label: 'Jumlah Tamu',
+          value: `${formatNumber(
+            (data.reservation.waiting.totalPerson || 0) +
+              (data.reservation.accepted.totalPerson || 0) +
+              (data.reservation.succeed.totalPerson || 0) +
+              (data.reservation.failed.totalPerson || 0),
+          )} Orang`,
+          details: [
+            {
+              label: 'Menunggu',
+              value: `${formatNumber(data.reservation.waiting.totalPerson || 0)} Orang`,
+            },
+            {
+              label: 'Diterima',
+              value: `${formatNumber(data.reservation.accepted.totalPerson || 0)} Orang`,
+            },
+            {
+              label: 'Selesai',
+              value: `${formatNumber(data.reservation.succeed.totalPerson || 0)} Orang`,
+            },
+            {
+              label: 'Dibatalkan',
+              value: `${formatNumber(data.reservation.failed.totalPerson || 0)} Orang`,
+            },
+          ],
+        },
+        {
+          label: 'Total Uang Muka (DP)',
+          value: formatCurrency(
+            (data.reservation.waiting.totalDeposit || 0) +
+              (data.reservation.accepted.totalDeposit || 0) +
+              (data.reservation.succeed.totalDeposit || 0) +
+              (data.reservation.failed.totalDeposit || 0),
+          ),
+          details: [
+            {
+              label: 'Menunggu',
+              value: formatCurrency(data.reservation.waiting.totalDeposit || 0),
+            },
+            {
+              label: 'Diterima',
+              value: formatCurrency(data.reservation.accepted.totalDeposit || 0),
+            },
+            {
+              label: 'Selesai',
+              value: formatCurrency(data.reservation.succeed.totalDeposit || 0),
+            },
+            {
+              label: 'Dibatalkan',
+              value: formatCurrency(data.reservation.failed.totalDeposit || 0),
+            },
+          ],
+        },
+        {
+          label: 'Total Uang Muka (DP) Terbayar',
+          value: formatCurrency(
+            (data.reservation.waiting.totalPaidDeposit || 0) +
+              (data.reservation.accepted.totalPaidDeposit || 0) +
+              (data.reservation.succeed.totalPaidDeposit || 0) +
+              (data.reservation.failed.totalPaidDeposit || 0),
+          ),
+          details: [
+            {
+              label: 'Menunggu',
+              value: formatCurrency(data.reservation.waiting.totalPaidDeposit || 0),
+            },
+            {
+              label: 'Diterima',
+              value: formatCurrency(data.reservation.accepted.totalPaidDeposit || 0),
+            },
+            {
+              label: 'Selesai',
+              value: formatCurrency(data.reservation.succeed.totalPaidDeposit || 0),
+            },
+            {
+              label: 'Dibatalkan',
+              value: formatCurrency(data.reservation.failed.totalPaidDeposit || 0),
+            },
+          ],
+        },
+      ] as RowItem[],
       grossSalesRows: [
         {
           label: 'Total Produk Terjual',
@@ -683,6 +801,12 @@ export default function BackofficeDashboardPage() {
                   Math.round(report.metrics.totalWalletExpense),
                 )}
                 rows={dashboard.walletExpenseRows}
+              />
+              <MetricCard
+                title="Reservasi"
+                total={formatNumber(dashboard.totalReservations)}
+                rows={dashboard.reservationRows}
+                unitLabel="Reservasi"
               />
             </div>
 

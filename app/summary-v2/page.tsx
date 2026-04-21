@@ -318,9 +318,15 @@ function V2ReservationBlock({
                       </p>
                       <button
                         type="button"
+                        onClick={() =>
+                          setExpanded((p) => ({
+                            ...p,
+                            [metric.key]: !p[metric.key],
+                          }))
+                        }
                         className={cn('mt-1 text-xs font-medium', accent)}
                       >
-                        Selengkapnya
+                        {isOpen ? 'Sembunyikan' : 'Selengkapnya'}
                       </button>
                     </div>
                   </div>
@@ -373,6 +379,7 @@ export default function SummaryV2Page() {
   const [expandedWalletIncome, setExpandedWalletIncome] = useState<
     Record<string, boolean>
   >({})
+  const [isWalletIncomeTotalOpen, setIsWalletIncomeTotalOpen] = useState(false)
   const [expandedCompliment, setExpandedCompliment] = useState<
     Record<string, boolean>
   >({})
@@ -834,15 +841,53 @@ export default function SummaryV2Page() {
                 )
               })}
               <DottedRule />
-              <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-                <span className="text-sm font-bold text-neutral-900">
-                  Total Pemasukan Dompet
-                </span>
-                <span className="inline-flex items-center gap-1 text-sm font-bold tabular-nums text-neutral-900">
-                  {formatCurrency(report.metrics.totalWalletIncome)}
-                  <ChevronDown className="h-4 w-4 text-neutral-500" />
-                </span>
+              <div className="px-4 py-3.5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-expanded={isWalletIncomeTotalOpen}
+                      onClick={() => setIsWalletIncomeTotalOpen((prev) => !prev)}
+                      className="text-neutral-500"
+                    >
+                      {isWalletIncomeTotalOpen ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </button>
+                    <span className="text-sm font-bold text-neutral-900">
+                      Total Pemasukan Dompet
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-sm font-bold tabular-nums text-neutral-900">
+                    {formatCurrency(report.metrics.totalWalletIncome)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsWalletIncomeTotalOpen((prev) => !prev)}
+                  className={cn('mt-1 text-xs font-medium', accent)}
+                >
+                  {isWalletIncomeTotalOpen ? 'Sembunyikan' : 'Selengkapnya'}
+                </button>
               </div>
+              {isWalletIncomeTotalOpen && (
+                <div className="space-y-2 border-t border-neutral-100 bg-neutral-50/80 px-4 py-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-600">Pemasukan Dompet</span>
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(report.metrics.totalWalletIncome)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-600">
+                      Settlement (belum ada di API)
+                    </span>
+                    <span className="font-semibold tabular-nums">-</span>
+                  </div>
+                </div>
+              )}
             </SectionShell>
 
             {/* Pengeluaran Dompet */}
