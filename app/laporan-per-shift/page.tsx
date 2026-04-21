@@ -476,6 +476,12 @@ export default function SummaryV2Page() {
   const [expandedCompliment, setExpandedCompliment] = useState<
     Record<string, boolean>
   >({})
+  const [expandedWalletExpenseGroups, setExpandedWalletExpenseGroups] = useState<
+    Record<'bookClosing' | 'other', boolean>
+  >({
+    bookClosing: true,
+    other: true,
+  })
 
   async function fetchSaleSummary() {
     if (!date) {
@@ -980,9 +986,11 @@ export default function SummaryV2Page() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-neutral-600">
-                      Settlement (belum ada di API)
+                      Settlement
                     </span>
-                    <span className="font-semibold tabular-nums">-</span>
+                    <span className="font-semibold tabular-nums">
+                      {formatCurrency(report.metrics.totalSettlement)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -990,18 +998,143 @@ export default function SummaryV2Page() {
 
             {/* Pengeluaran Dompet */}
             <SectionShell title="Pengeluaran Dompet">
-              {report.sections.walletExpenseRows.map((row, idx) => (
-                <div key={row.label}>
-                  <RowLine
-                    label={row.label}
-                    value={row.value}
-                    valueClassName="text-red-600"
-                  />
-                  {idx < report.sections.walletExpenseRows.length - 1 && (
+              {(
+                [
+                  {
+                    key: 'bookClosing' as const,
+                    label: 'Tutup Buku',
+                    data:
+                      data.walletExpense.bookClosing ?? {
+                        cash: data.walletExpense.cash,
+                        nonCash: data.walletExpense.nonCash,
+                        debit: data.walletExpense.debit,
+                        qrisStatic: data.walletExpense.qrisStatic,
+                        manualTransfer: data.walletExpense.manualTransfer,
+                        onlineFood: data.walletExpense.onlineFood,
+                        cityLedger: data.walletExpense.cityLedger,
+                        deposit: data.walletExpense.deposit,
+                      },
+                  },
+                  {
+                    key: 'other' as const,
+                    label: 'Lainnya',
+                    data: data.walletExpense.other ?? {},
+                  },
+                ] as const
+              ).map((group) => {
+                const isOpen = expandedWalletExpenseGroups[group.key]
+                const total =
+                  Number(group.data.cash ?? 0) +
+                  Number(group.data.nonCash ?? 0) +
+                  Number(group.data.debit ?? 0) +
+                  Number(group.data.qrisStatic ?? 0) +
+                  Number(group.data.manualTransfer ?? 0) +
+                  Number(group.data.onlineFood ?? 0) +
+                  Number(group.data.cityLedger ?? 0) +
+                  Number(group.data.deposit ?? 0)
+                return (
+                  <div key={group.key}>
+                    <div className="flex items-start justify-between gap-4 px-4 py-3.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedWalletExpenseGroups((p) => ({
+                                ...p,
+                                [group.key]: !p[group.key],
+                              }))
+                            }
+                            className="mt-0.5 text-neutral-500"
+                          >
+                            {isOpen ? (
+                              <ChevronUp className="h-4 w-4" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </button>
+                          <div>
+                            <p className="text-sm font-medium text-neutral-900">
+                              {group.label}
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedWalletExpenseGroups((p) => ({
+                                  ...p,
+                                  [group.key]: !p[group.key],
+                                }))
+                              }
+                              className={cn('mt-0.5 text-xs font-medium', accent)}
+                            >
+                              {isOpen ? 'Sembunyikan' : 'Selengkapnya'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums text-red-600">
+                        {formatCurrency(total, true)}
+                      </span>
+                    </div>
+                    {isOpen && (
+                      <div className="space-y-2 border-t border-neutral-100 bg-neutral-50/80 px-4 py-3">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Tunai</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.cash ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Non-Tunai</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.nonCash ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Debit</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.debit ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">QRIS Static</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.qrisStatic ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Transfer Manual</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(
+                              Number(group.data.manualTransfer ?? 0),
+                              true,
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Online Food</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.onlineFood ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">Deposit</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.deposit ?? 0), true)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-neutral-600">City Ledger</span>
+                          <span className="font-semibold tabular-nums text-red-600">
+                            {formatCurrency(Number(group.data.cityLedger ?? 0), true)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <div className="border-t border-neutral-200" />
-                  )}
-                </div>
-              ))}
+                  </div>
+                )
+              })}
               <DottedRule />
               <div className="flex items-center justify-between gap-4 px-4 py-3.5">
                 <span className="text-sm font-bold text-neutral-900">

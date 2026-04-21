@@ -59,6 +59,7 @@ export type SalesBlock = {
   cogs: number;
   guestCount: number;
   multiprices?: MultipriceBreakdown[];
+  settlement?: number;
 };
 
 export function getOrderCountByBlock(block: Pick<SalesBlock, "orderGeneralCount" | "orderSplitBillCount" | "orderDineInCount" | "orderTakeAwayCount" | "orderDeliveryCount">): number {
@@ -93,15 +94,23 @@ export type WalletIncome = {
   depositCount?: number;
 };
 
-export type WalletExpense = {
-  cash: number;
-  nonCash: number;
-  debit: number;
-  qrisStatic: number;
-  manualTransfer: number;
-  cityLedger: number;
-  onlineFood: number;
+export type WalletExpenseChannel = {
+  cash?: number;
+  nonCash?: number;
+  debit?: number;
+  qrisStatic?: number;
+  manualTransfer?: number;
+  cityLedger?: number;
+  onlineFood?: number;
   deposit?: number;
+};
+
+export type WalletExpense = WalletExpenseChannel & {
+  /** Legacy shape */
+  deposit?: number;
+  /** New API shape */
+  bookClosing?: WalletExpenseChannel;
+  other?: WalletExpenseChannel;
 };
 
 /** Pecahan tunai dompet operasional (manual vs penjualan). */
@@ -211,6 +220,24 @@ function walletExpenseDepositAmount(data: SummaryData): number {
   return data.depositWallet?.totalWithdraw ?? 0;
 }
 
+export function getWalletExpenseAmountByMethod(
+  data: SummaryData,
+  method: keyof WalletExpenseChannel,
+): number {
+  const direct = Number(data.walletExpense?.[method] ?? 0);
+  const bookClosing = Number(data.walletExpense?.bookClosing?.[method] ?? 0);
+  const other = Number(data.walletExpense?.other?.[method] ?? 0);
+  return direct + bookClosing + other;
+}
+
+function totalSettlementAmount(data: SummaryData): number {
+  return (
+    Number(data.sales.settlement ?? 0) +
+    Number(data.onlineFood.settlement ?? 0) +
+    Number(data.cityLedger.settlement ?? 0)
+  );
+}
+
 // --- Env & format ---
 
 export const REPORT_BASE_URL = process.env.NEXT_PUBLIC_REPORT_BASE_URL ?? "http://localhost:3000";
@@ -273,6 +300,7 @@ export type ReportMetrics = {
   totalNetRevenue: number;
   totalWalletIncome: number;
   totalWalletExpense: number;
+  totalSettlement: number;
 };
 
 function computeMetrics(data: SummaryData): ReportMetrics {
@@ -368,16 +396,17 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.walletIncome.manualTransferAmount || 0) +
     (data.walletIncome.onlineFoodAmount || 0) +
     (data.walletIncome.cityLedgerAmount || 0) +
-    depositIncomeTotal;
+    depositIncomeTotal +
+    totalSettlementAmount(data);
 
   const totalWalletExpense =
-    (data.walletExpense.cash || 0) +
-    (data.walletExpense.nonCash || 0) +
-    (data.walletExpense.debit || 0) +
-    (data.walletExpense.qrisStatic || 0) +
-    (data.walletExpense.manualTransfer || 0) +
-    (data.walletExpense.cityLedger || 0) +
-    (data.walletExpense.onlineFood || 0) +
+    getWalletExpenseAmountByMethod(data, "cash") +
+    getWalletExpenseAmountByMethod(data, "nonCash") +
+    getWalletExpenseAmountByMethod(data, "debit") +
+    getWalletExpenseAmountByMethod(data, "qrisStatic") +
+    getWalletExpenseAmountByMethod(data, "manualTransfer") +
+    getWalletExpenseAmountByMethod(data, "cityLedger") +
+    getWalletExpenseAmountByMethod(data, "onlineFood") +
     walletExpenseDepositAmount(data);
 
   return {
@@ -403,6 +432,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     totalNetRevenue,
     totalWalletIncome,
     totalWalletExpense,
+    totalSettlement: totalSettlementAmount(data),
   };
 }
 
@@ -543,15 +573,24 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
         value: formatCurrency(totalDepositIncomeFromWallet(data)),
         hint: `${formatNumber(totalDepositIncomeCountFromWallet(data))} Transaksi`,
       },
+      {
+        label: "Settlement",
+        value: formatCurrency(m.totalSettlement),
+        hint: `${formatNumber(
+          Number(data.sales.settlement ? 1 : 0) +
+            Number(data.onlineFood.settlement ? 1 : 0) +
+            Number(data.cityLedger.settlement ? 1 : 0),
+        )} Transaksi`,
+      },
     ],
     walletExpenseRows: [
-      { label: "Tunai", value: formatCurrency(data.walletExpense.cash || 0, true), negative: true },
-      { label: "Non-Tunai", value: formatCurrency(data.walletExpense.nonCash || 0, true), negative: true },
-      { label: "Debit", value: formatCurrency(data.walletExpense.debit || 0, true), negative: true },
-      { label: "QRIS Static", value: formatCurrency(data.walletExpense.qrisStatic || 0, true), negative: true },
-      { label: "Transfer Manual", value: formatCurrency(data.walletExpense.manualTransfer || 0, true), negative: true },
-      { label: "City Ledger", value: formatCurrency(data.walletExpense.cityLedger || 0, true), negative: true },
-      { label: "Online Food", value: formatCurrency(data.walletExpense.onlineFood || 0, true), negative: true },
+      { label: "Tunai", value: formatCurrency(getWalletExpenseAmountByMethod(data, "cash"), true), negative: true },
+      { label: "Non-Tunai", value: formatCurrency(getWalletExpenseAmountByMethod(data, "nonCash"), true), negative: true },
+      { label: "Debit", value: formatCurrency(getWalletExpenseAmountByMethod(data, "debit"), true), negative: true },
+      { label: "QRIS Static", value: formatCurrency(getWalletExpenseAmountByMethod(data, "qrisStatic"), true), negative: true },
+      { label: "Transfer Manual", value: formatCurrency(getWalletExpenseAmountByMethod(data, "manualTransfer"), true), negative: true },
+      { label: "City Ledger", value: formatCurrency(getWalletExpenseAmountByMethod(data, "cityLedger"), true), negative: true },
+      { label: "Online Food", value: formatCurrency(getWalletExpenseAmountByMethod(data, "onlineFood"), true), negative: true },
       { label: "Deposit", value: formatCurrency(walletExpenseDepositAmount(data), true), negative: true },
     ],
   };

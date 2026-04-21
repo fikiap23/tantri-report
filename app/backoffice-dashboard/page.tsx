@@ -15,6 +15,7 @@ import {
   formatCurrency,
   formatDateForInput,
   formatNumber,
+  getWalletExpenseAmountByMethod,
   getOrderCountByBlock,
   type SummaryData,
 } from '@/lib/report-calculations'
@@ -559,32 +560,41 @@ export default function BackofficeDashboardPage() {
       walletExpenseRows: [
         {
           label: 'Tunai',
-          value: formatCurrency(data.walletExpense.cash || 0, true),
+          value: formatCurrency(getWalletExpenseAmountByMethod(data, 'cash'), true),
           negative: true,
         },
         {
           label: 'Non Tunai',
-          value: formatCurrency(data.walletExpense.nonCash || 0, true),
+          value: formatCurrency(getWalletExpenseAmountByMethod(data, 'nonCash'), true),
           negative: true,
         },
         {
           label: 'Debit',
-          value: formatCurrency(data.walletExpense.debit || 0, true),
+          value: formatCurrency(getWalletExpenseAmountByMethod(data, 'debit'), true),
           negative: true,
         },
         {
           label: 'QR Static',
-          value: formatCurrency(data.walletExpense.qrisStatic || 0, true),
+          value: formatCurrency(
+            getWalletExpenseAmountByMethod(data, 'qrisStatic'),
+            true,
+          ),
           negative: true,
         },
         {
           label: 'Transfer Manual',
-          value: formatCurrency(data.walletExpense.manualTransfer || 0, true),
+          value: formatCurrency(
+            getWalletExpenseAmountByMethod(data, 'manualTransfer'),
+            true,
+          ),
           negative: true,
         },
         {
           label: 'Online Food',
-          value: formatCurrency(data.walletExpense.onlineFood || 0, true),
+          value: formatCurrency(
+            getWalletExpenseAmountByMethod(data, 'onlineFood'),
+            true,
+          ),
           negative: true,
         },
       ] as RowItem[],
