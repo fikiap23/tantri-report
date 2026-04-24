@@ -415,7 +415,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.sales?.platformFee || 0) +
     (data.cityLedger?.platformFee || 0) +
     (data.onlineFood?.platformFee || 0) +
-    getComplimentPlatformFee(data)
+    (data.compliment.platformFee || 0)
 
   const totalMultipriceFee =
     (data.sales?.multipriceFee || 0) +
