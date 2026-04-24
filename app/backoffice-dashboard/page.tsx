@@ -498,14 +498,6 @@ export default function BackofficeDashboardPage() {
           value: formatCurrency(report.metrics.salesRevenue),
         },
         {
-          label: 'Pembulatan',
-          value: formatCurrency(
-            report.metrics.rounding,
-            report.metrics.rounding < 0,
-          ),
-          negative: report.metrics.rounding < 0,
-        },
-        {
           label: 'Total Pendapatan Penjualan',
           value: formatCurrency(report.metrics.totalSalesRevenue),
         },

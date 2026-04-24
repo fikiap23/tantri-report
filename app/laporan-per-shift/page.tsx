@@ -200,17 +200,22 @@ function CollapsiblePlatformFeeCard({
       'cityLedger',
       data.platformFeeBreakdown.cityLedger,
     )
-    const complimentValue = data.platformFeeBreakdown.compliment
+    const complimentBreakdown = data.platformFeeBreakdown.compliment
+    const complimentFee =
+      typeof complimentBreakdown === 'number'
+        ? complimentBreakdown
+        : Number(complimentBreakdown?.fee || 0)
+    const complimentCount =
+      typeof complimentBreakdown === 'object'
+        ? Number(complimentBreakdown?.count || 0)
+        : 0
     const compliment = {
-      label:
-        typeof complimentValue === 'number'
-          ? 'Platform Fee Compliment'
-          : 'Platform Fee Compliment (belum ada di API)',
+      label: complimentFee > 0 ? 'Platform Fee Compliment' : 'Platform Fee Compliment (belum ada di API)',
       value:
-        typeof complimentValue === 'number'
-          ? formatCurrency(complimentValue)
+        complimentFee > 0
+          ? `${formatCurrency(complimentFee)}${complimentCount > 0 ? ` (${formatNumber(complimentCount)} Transaksi)` : ''}`
           : '-',
-      total: typeof complimentValue === 'number' ? complimentValue : 0,
+      total: complimentFee > 0 ? complimentFee : 0,
     }
     const total =
       sales.total + onlineFood.total + cityLedger.total + compliment.total
@@ -1624,10 +1629,6 @@ export default function SummaryV2Page() {
                 label="Total Penjualan City Ledger"
                 value={formatCurrency(report.metrics.grossCityLedger)}
               />
-              <RowLine
-                label="Total Penjualan Compliment"
-                value={formatCurrency(report.metrics.grossCompliment)}
-              />
               {report.revenueExpandableRows
                 .filter((r) =>
                   ['Platform Fee', 'Multiprice Fee', 'Xendit Fee'].includes(
@@ -1729,10 +1730,6 @@ export default function SummaryV2Page() {
                 label="Harga Pokok Penjualan (HPP)"
                 value={formatCurrency(report.metrics.cogs, true)}
                 valueClassName="text-red-600"
-              />
-              <RowLine
-                label="Pembulatan"
-                value={formatCurrency(report.metrics.rounding)}
               />
               <RowLine
                 label="Margin Penjualan"

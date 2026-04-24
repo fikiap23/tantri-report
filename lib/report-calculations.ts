@@ -37,6 +37,11 @@ export type PriceCount = {
   count: number
 }
 
+export type ComplimentPlatformFeeBreakdown = {
+  fee: number
+  count: number
+}
+
 export type SalesBlock = {
   productSoldCount: number
   orderCount?: number
@@ -176,7 +181,7 @@ export type SummaryData = {
     sales: PriceCount[]
     onlineFood: PriceCount[]
     cityLedger: PriceCount[]
-    compliment: number
+    compliment: number | ComplimentPlatformFeeBreakdown
   }
   xenditFee?: XenditFeeBreakdown
   reservation: {
@@ -274,6 +279,23 @@ function totalXenditFeeFromBreakdown(data: SummaryData): number {
     Number(breakdown.virtualAccount?.amount ?? 0) +
     Number(breakdown.visa?.amount ?? 0)
   )
+}
+
+function getComplimentPlatformFee(data: SummaryData): number {
+  const compliment = data.platformFeeBreakdown?.compliment
+  if (typeof compliment === 'number') return Number(compliment || 0)
+  if (compliment && typeof compliment === 'object') {
+    return Number(compliment.fee || 0)
+  }
+  return Number(data.compliment?.platformFee || 0)
+}
+
+function getComplimentPlatformFeeCount(data: SummaryData): number {
+  const compliment = data.platformFeeBreakdown?.compliment
+  if (compliment && typeof compliment === 'object') {
+    return Number(compliment.count || 0)
+  }
+  return 0
 }
 
 // --- Env & format ---
@@ -392,7 +414,8 @@ function computeMetrics(data: SummaryData): ReportMetrics {
   const totalPlatformFee =
     (data.sales?.platformFee || 0) +
     (data.cityLedger?.platformFee || 0) +
-    (data.onlineFood?.platformFee || 0)
+    (data.onlineFood?.platformFee || 0) +
+    getComplimentPlatformFee(data)
 
   const totalMultipriceFee =
     (data.sales?.multipriceFee || 0) +
@@ -721,14 +744,9 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
         hint: 'didapat dari Total Pendapatan Kotor - Harga Pokok Penjualan',
       },
       {
-        label: 'Pembulatan',
-        value: formatCurrency(m.rounding, m.rounding < 0),
-        negative: m.rounding < 0,
-      },
-      {
         label: 'Total Pendapatan Penjualan',
         value: formatCurrency(m.totalSalesRevenue),
-        hint: 'didapat dari Pendapatan Penjualan + Pembulatan',
+        hint: 'didapat dari Pendapatan Penjualan',
       },
       {
         label: 'Rugi',
@@ -960,13 +978,24 @@ function getOnlineFoodWalletDetails(data: SummaryData): MetricRow[] {
     const rawName = (item.name as string | undefined) || ''
     const key = rawName.trim().toLowerCase()
     if (!key) continue
-    const amountRaw =
+    const explicitTotal =
       (item.total as number | undefined) ??
       (item.amount as number | undefined) ??
-      (item.totalAmount as number | undefined) ??
+      (item.totalAmount as number | undefined)
+    /** productPrice, fee, platformFee, serviceFee dari API sudah agregat lintas order. */
+    const feeTotal = Number((item.fee as number | undefined) ?? 0)
+    const platformFeeTotal = Number(
+      (item.platformFee as number | undefined) ?? 0,
+    )
+    const serviceFeeTotal = Number((item.serviceFee as number | undefined) ?? 0)
+    const base =
       (item.productPrice as number | undefined) ??
       (item.productSoldTotal as number | undefined) ??
       (item.value as number | undefined)
+    const amountRaw =
+      typeof explicitTotal === 'number' && !Number.isNaN(explicitTotal)
+        ? explicitTotal
+        : Number(base ?? 0) + feeTotal + platformFeeTotal + serviceFeeTotal
     if (typeof amountRaw === 'number' && amountRaw >= 0) {
       details.set(toTitleFoodChannel(key), formatCurrency(amountRaw))
     } else {
@@ -1034,10 +1063,15 @@ function platformFeeRevenueDetails(data: SummaryData): MetricRow[] {
       value: formatCurrency(price * count, true),
       negative: true as const,
     }))
-  if (data.platformFeeBreakdown.compliment) {
+  const complimentPlatformFee = getComplimentPlatformFee(data)
+  const complimentCount = getComplimentPlatformFeeCount(data)
+  if (complimentPlatformFee > 0) {
     details.push({
-      label: 'Compliment',
-      value: formatCurrency(data.platformFeeBreakdown.compliment, true),
+      label:
+        complimentCount > 0
+          ? `Compliment x ${formatNumber(complimentCount)} Transaksi`
+          : 'Compliment',
+      value: formatCurrency(complimentPlatformFee, true),
       negative: true,
     })
   }
@@ -1106,10 +1140,10 @@ function multipriceFeeDetails(data: SummaryData): MetricRow[] {
     const count = Number((item.nTransaction as number | undefined) ?? 0)
     if (!rawName) continue
     if (fee <= 0 && count <= 0) continue
-    const totalFee = fee * Math.max(count || 1, 1)
+    /** fee dari API sudah total agregat per channel, bukan per transaksi. */
     rows.push({
       label: `${toTitleFoodChannel(rawName)} Fee x ${formatNumber(count || 0)} Transaksi`,
-      value: formatCurrency(totalFee, true),
+      value: formatCurrency(fee, true),
       negative: true,
     })
   }
