@@ -152,14 +152,7 @@ export function getPlatformFeeBreakdownSlice(
 }
 
 export function priceCountBreakdownRows(items: PriceCount[]): MetricRow[] {
-  const withActivity = (items || []).filter((item) => (item.count || 0) > 0)
-  if (withActivity.length === 0) {
-    return (items || []).map((item) => ({
-      label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
-      value: formatCurrency((item.price || 0) * (item.count || 0)),
-    }))
-  }
-  return withActivity.map((item) => ({
+  return (items || []).map((item) => ({
     label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
     value: formatCurrency((item.price || 0) * (item.count || 0)),
   }))
