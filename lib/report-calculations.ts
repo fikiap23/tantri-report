@@ -28,80 +28,120 @@ export type ExpandableMetricRow = MetricRow & {
   details?: MetricRow[]
 }
 
-type MultipriceBreakdown = {
-  [key: string]: unknown
-}
+/** Item di `multiprices[]` — struktur detail bisa bervariasi per channel. */
+export type MultipriceEntry = Record<string, unknown>
 
 export type PriceCount = {
   price: number
   count: number
 }
 
-export type ComplimentPlatformFeeBreakdown = {
-  fee: number
-  count: number
-}
-
-export type SalesBlock = {
+/** Blok penjualan / city ledger (bentuk sama di response API). */
+export type SalesChannelBlock = {
   productSoldCount: number
-  orderCount?: number
-  orderGeneralCount?: number
-  orderSplitBillCount?: number
-  orderDineInCount?: number
-  orderTakeAwayCount?: number
-  orderDeliveryCount?: number
-  orderCancelledCount?: number
+  orderGeneralCount: number
+  orderSplitBillCount: number
   productSoldTotal: number
-  productNormalSoldTotal?: number
-  productCustomAmountSoldTotal?: number
-  discount?: number
-  tax?: number
-  /** Legacy: gabungan fee; API baru memisah byCustomer / byCafe */
-  platformFee?: number
-  platformFeeByCustomer?: number
-  platformFeeByCafe?: number
-  serviceFee?: number
+  productNormalSoldTotal: number
+  productCustomAmountSoldTotal: number
+  discount: number
+  tax: number
+  platformFeeByCustomer: number
+  platformFeeByCafe: number
+  serviceFee: number
   multipriceFee: number
   rounding: number
   xenditFee: number
   cogs: number
   guestCount: number
-  multiprices?: MultipriceBreakdown[]
-  settlement?: number
+  multiprices: MultipriceEntry[]
+  orderDineInCount: number
+  orderTakeAwayCount: number
+  orderDeliveryCount: number
+  orderCancelledCount: number
+  settlement: number
+}
+
+/** Blok online food (tanpa tax / serviceFee di response API). */
+export type OnlineFoodChannelBlock = {
+  orderGeneralCount: number
+  orderSplitBillCount: number
+  productSoldCount: number
+  productSoldTotal: number
+  productNormalSoldTotal: number
+  productCustomAmountSoldTotal: number
+  discount: number
+  platformFeeByCustomer: number
+  platformFeeByCafe: number
+  multipriceFee: number
+  rounding: number
+  xenditFee: number
+  cogs: number
+  guestCount: number
+  multiprices: MultipriceEntry[]
+  orderDineInCount: number
+  orderTakeAwayCount: number
+  orderDeliveryCount: number
+  orderCancelledCount: number
+  settlement: number
+}
+
+/** Blok compliment. */
+export type ComplimentChannelBlock = {
+  orderGeneralCount: number
+  orderSplitBillCount: number
+  productSoldCount: number
+  productSoldTotal: number
+  productNormalSoldTotal: number
+  productCustomAmountSoldTotal: number
+  platformFeeByCustomer: number
+  platformFeeByCafe: number
+  complimentAmount: number
+  rounding: number
+  xenditFee: number
+  cogs: number
+  guestCount: number
+  multiprices: MultipriceEntry[]
+  orderDineInCount: number
+  orderTakeAwayCount: number
+  orderDeliveryCount: number
+  orderCancelledCount: number
+}
+
+/** Alias untuk kalkulasi yang memakai bentuk sales/city ledger. */
+export type SalesBlock = SalesChannelBlock
+
+export type PlatformFeeBlockFields = {
+  platformFeeByCustomer: number
+  platformFeeByCafe: number
 }
 
 export type PlatformFeePayer = 'byCustomer' | 'byCafe'
 
-export type PlatformFeeBreakdownChannel = {
+export type PlatformFeeComplimentCount = {
+  count: number
+}
+
+export type PlatformFeeBreakdownSlice = {
   sales: PriceCount[]
   onlineFood: PriceCount[]
   cityLedger: PriceCount[]
-  compliment: number | ComplimentPlatformFeeBreakdown | { count: number }
+  compliment: PlatformFeeComplimentCount
 }
 
-export type PlatformFeeBreakdownRoot = {
-  byCustomer?: PlatformFeeBreakdownChannel
-  byCafe?: PlatformFeeBreakdownChannel
-  /** Legacy flat shape */
-  sales?: PriceCount[]
-  onlineFood?: PriceCount[]
-  cityLedger?: PriceCount[]
-  compliment?: number | ComplimentPlatformFeeBreakdown | { count: number }
+export type PlatformFeeBreakdown = {
+  byCustomer: PlatformFeeBreakdownSlice
+  byCafe: PlatformFeeBreakdownSlice
 }
 
-export function getBlockPlatformFeeByCustomer(block: SalesBlock): number {
-  if (typeof block.platformFeeByCustomer === 'number') {
-    return Number(block.platformFeeByCustomer || 0)
-  }
-  return Number(block.platformFee || 0)
+export function getBlockPlatformFeeByCustomer(
+  block: PlatformFeeBlockFields,
+): number {
+  return block.platformFeeByCustomer
 }
 
-export function getBlockPlatformFeeByCafe(block: SalesBlock): number {
-  return Number(block.platformFeeByCafe || 0)
-}
-
-export function getBlockPlatformFeeBilling(block: SalesBlock): number {
-  return getBlockPlatformFeeByCustomer(block) + getBlockPlatformFeeByCafe(block)
+function blockPlatformFeeByCafe(block: PlatformFeeBlockFields): number {
+  return block.platformFeeByCafe
 }
 
 function sumPriceCountItems(items: PriceCount[] | undefined): number {
@@ -111,54 +151,23 @@ function sumPriceCountItems(items: PriceCount[] | undefined): number {
   )
 }
 
-function isNestedPlatformFeeBreakdown(
-  breakdown: PlatformFeeBreakdownRoot | undefined,
-): breakdown is PlatformFeeBreakdownRoot & {
-  byCustomer: PlatformFeeBreakdownChannel
-} {
-  return Boolean(breakdown?.byCustomer || breakdown?.byCafe)
-}
-
-export function getPlatformFeeBreakdownSlice(
+function getPlatformFeeBreakdownSlice(
   data: SummaryData,
   payer: PlatformFeePayer,
-): PlatformFeeBreakdownChannel {
-  const pb = data.platformFeeBreakdown
-  if (isNestedPlatformFeeBreakdown(pb)) {
-    const slice = payer === 'byCustomer' ? pb.byCustomer : pb.byCafe
-    return (
-      slice ?? {
-        sales: [],
-        onlineFood: [],
-        cityLedger: [],
-        compliment: { count: 0 },
-      }
-    )
-  }
-  if (payer === 'byCustomer') {
-    return {
-      sales: pb.sales ?? [],
-      onlineFood: pb.onlineFood ?? [],
-      cityLedger: pb.cityLedger ?? [],
-      compliment: pb.compliment ?? { count: 0 },
-    }
-  }
-  return {
-    sales: [],
-    onlineFood: [],
-    cityLedger: [],
-    compliment: { count: 0 },
-  }
+): PlatformFeeBreakdownSlice {
+  return payer === 'byCustomer'
+    ? data.platformFeeBreakdown.byCustomer
+    : data.platformFeeBreakdown.byCafe
 }
 
-export function priceCountBreakdownRows(items: PriceCount[]): MetricRow[] {
+function priceCountBreakdownRows(items: PriceCount[]): MetricRow[] {
   return (items || []).map((item) => ({
     label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
     value: formatCurrency((item.price || 0) * (item.count || 0)),
   }))
 }
 
-export type PlatformFeeBillingChannelRow = {
+type PlatformFeeBillingChannelRow = {
   key: string
   label: string
   total: number
@@ -166,7 +175,7 @@ export type PlatformFeeBillingChannelRow = {
   expandable: boolean
 }
 
-export type PlatformFeeBillingSection = {
+type PlatformFeeBillingSection = {
   payer: PlatformFeePayer
   title: string
   channels: PlatformFeeBillingChannelRow[]
@@ -175,26 +184,18 @@ export type PlatformFeeBillingSection = {
 }
 
 function complimentFeeFromBreakdown(
-  compliment: PlatformFeeBreakdownChannel['compliment'],
-  block: SalesBlock,
+  block: ComplimentChannelBlock,
   payer: PlatformFeePayer,
 ): number {
-  if (typeof compliment === 'number') return compliment
-  if (compliment && typeof compliment === 'object' && 'fee' in compliment) {
-    return Number(compliment.fee || 0)
-  }
   return payer === 'byCustomer'
-    ? getBlockPlatformFeeByCustomer(block)
-    : getBlockPlatformFeeByCafe(block)
+    ? block.platformFeeByCustomer
+    : block.platformFeeByCafe
 }
 
 function complimentCountFromBreakdown(
-  compliment: PlatformFeeBreakdownChannel['compliment'],
+  compliment: PlatformFeeComplimentCount,
 ): number {
-  if (typeof compliment === 'object' && compliment && 'count' in compliment) {
-    return Number(compliment.count || 0)
-  }
-  return 0
+  return compliment.count
 }
 
 export function buildPlatformFeeBillingSection(
@@ -228,7 +229,7 @@ export function buildPlatformFeeBillingSection(
     const fromBlock =
       payer === 'byCustomer'
         ? getBlockPlatformFeeByCustomer(ch.block)
-        : getBlockPlatformFeeByCafe(ch.block)
+        : blockPlatformFeeByCafe(ch.block)
     const total = fromBreakdown > 0 ? fromBreakdown : fromBlock
     const rows = priceCountBreakdownRows(ch.items || [])
     return {
@@ -240,11 +241,7 @@ export function buildPlatformFeeBillingSection(
     }
   })
 
-  const complimentFee = complimentFeeFromBreakdown(
-    slice.compliment,
-    data.compliment,
-    payer,
-  )
+  const complimentFee = complimentFeeFromBreakdown(data.compliment, payer)
   const complimentCount = complimentCountFromBreakdown(slice.compliment)
   const compliment = {
     label: 'Platform Fee Compliment',
@@ -273,33 +270,25 @@ export function buildPlatformFeeBillingSection(
 }
 
 export function totalPlatformFeeBillingAmount(data: SummaryData): number {
-  return (
-    getBlockPlatformFeeBilling(data.sales) +
-    getBlockPlatformFeeBilling(data.onlineFood) +
-    getBlockPlatformFeeBilling(data.cityLedger) +
-    getBlockPlatformFeeBilling(data.compliment)
+  const blocks = [data.sales, data.onlineFood, data.cityLedger, data.compliment]
+  return blocks.reduce(
+    (sum, block) =>
+      sum +
+      getBlockPlatformFeeByCustomer(block) +
+      blockPlatformFeeByCafe(block),
+    0,
   )
 }
 
-export function totalPlatformFeeCustomerAmount(data: SummaryData): number {
-  return (
-    getBlockPlatformFeeByCustomer(data.sales) +
-    getBlockPlatformFeeByCustomer(data.onlineFood) +
-    getBlockPlatformFeeByCustomer(data.cityLedger) +
-    getBlockPlatformFeeByCustomer(data.compliment)
-  )
+export type OrderCountFields = {
+  orderGeneralCount: number
+  orderSplitBillCount: number
+  orderDineInCount: number
+  orderTakeAwayCount: number
+  orderDeliveryCount: number
 }
 
-export function getOrderCountByBlock(
-  block: Pick<
-    SalesBlock,
-    | 'orderGeneralCount'
-    | 'orderSplitBillCount'
-    | 'orderDineInCount'
-    | 'orderTakeAwayCount'
-    | 'orderDeliveryCount'
-  >,
-): number {
+export function getOrderCountByBlock(block: OrderCountFields): number {
   const generalAndSplit =
     (block.orderGeneralCount || 0) + (block.orderSplitBillCount || 0)
   if (generalAndSplit > 0) return generalAndSplit
@@ -332,27 +321,21 @@ export type WalletIncome = {
   onlineFoodCount: number
   cityLedgerAmount: number
   cityLedgerCount: number
-  depositAmount?: number
-  depositCount?: number
 }
 
 export type WalletExpenseChannel = {
-  cash?: number
-  nonCash?: number
-  debit?: number
-  qrisStatic?: number
-  manualTransfer?: number
-  cityLedger?: number
-  onlineFood?: number
-  deposit?: number
+  cash: number
+  nonCash: number
+  debit: number
+  qrisStatic: number
+  manualTransfer: number
+  cityLedger: number
+  onlineFood: number
 }
 
-export type WalletExpense = WalletExpenseChannel & {
-  /** Legacy shape */
-  deposit?: number
-  /** New API shape */
-  bookClosing?: WalletExpenseChannel
-  other?: WalletExpenseChannel
+export type WalletExpense = {
+  bookClosing: WalletExpenseChannel
+  other: WalletExpenseChannel
 }
 
 /** Pecahan tunai dompet operasional (manual vs penjualan). */
@@ -385,36 +368,17 @@ export type XenditFeeBreakdownItem = {
 }
 
 export type XenditFeeBreakdown = {
-  eWallet?: XenditFeeBreakdownItem
-  qris?: XenditFeeBreakdownItem
-  virtualAccount?: XenditFeeBreakdownItem
-  visa?: XenditFeeBreakdownItem
+  eWallet: XenditFeeBreakdownItem
+  qris: XenditFeeBreakdownItem
+  virtualAccount: XenditFeeBreakdownItem
+  visa: XenditFeeBreakdownItem
 }
 
-export type SummaryData = {
-  nameCashiers?: string[]
-  waitingTransactions?: WaitingTransaction[]
-  sales: SalesBlock
-  onlineFood: SalesBlock
-  cityLedger: SalesBlock
-  compliment: SalesBlock & {
-    complimentAmount?: number
-  }
-  platformFeeBreakdown: PlatformFeeBreakdownRoot
-  xenditFee?: XenditFeeBreakdown
-  reservation: {
-    waiting: ReservationState
-    accepted: ReservationState
-    succeed: ReservationState
-    failed: ReservationState
-  }
-  walletIncome: WalletIncome
-  walletExpense: WalletExpense
-  loss: number
-  /** Dipotong dari total pendapatan kotor (setelah fee). */
-  totalDepositDeduction?: number
-  cashWalletDeposit?: CashWalletDeposit
-  depositWallet?: DepositWallet
+export type ReservationSummary = {
+  waiting: ReservationState
+  accepted: ReservationState
+  succeed: ReservationState
+  failed: ReservationState
 }
 
 export type WaitingTransaction = {
@@ -424,6 +388,25 @@ export type WaitingTransaction = {
   totalPrice: number
   fee: number
   date: string
+}
+
+/** Root `data` dari GET report sale summary — selaras response API. */
+export type SummaryData = {
+  nameCashiers: string[]
+  waitingTransactions: WaitingTransaction[]
+  sales: SalesChannelBlock
+  onlineFood: OnlineFoodChannelBlock
+  cityLedger: SalesChannelBlock
+  compliment: ComplimentChannelBlock
+  platformFeeBreakdown: PlatformFeeBreakdown
+  xenditFee: XenditFeeBreakdown
+  reservation: ReservationSummary
+  loss: number
+  totalDepositDeduction: number
+  walletIncome: WalletIncome
+  walletExpense: WalletExpense
+  cashWalletDeposit: CashWalletDeposit
+  depositWallet: DepositWallet
 }
 
 export type ShiftUserSummaryItem = {
@@ -436,67 +419,82 @@ export type ShiftUserSummaryItem = {
 }
 
 function totalDepositIncomeFromWallet(data: SummaryData): number {
-  const dep = data.depositWallet?.deposit
-  if (dep) {
-    return (
-      (dep.totalDepositCash || 0) +
-      (dep.totalDepositDebit || 0) +
-      (dep.totalDepositQRStatic || 0) +
-      (dep.totalDepositEWallet || 0) +
-      (dep.totalDepositManualTransfer || 0)
-    )
-  }
-  return data.walletIncome.depositAmount ?? 0
+  const dep = data.depositWallet.deposit
+  return (
+    dep.totalDepositCash +
+    dep.totalDepositDebit +
+    dep.totalDepositQRStatic +
+    dep.totalDepositEWallet +
+    dep.totalDepositManualTransfer
+  )
 }
 
 function totalDepositIncomeCountFromWallet(data: SummaryData): number {
-  const dep = data.depositWallet?.deposit
-  if (dep) {
-    return (
-      (dep.countDepositCash || 0) +
-      (dep.countDepositDebit || 0) +
-      (dep.countDepositQRStatic || 0) +
-      (dep.countDepositEWallet || 0) +
-      (dep.countDepositManualTransfer || 0)
-    )
-  }
-  return data.walletIncome.depositCount ?? 0
+  const dep = data.depositWallet.deposit
+  return (
+    dep.countDepositCash +
+    dep.countDepositDebit +
+    dep.countDepositQRStatic +
+    dep.countDepositEWallet +
+    dep.countDepositManualTransfer
+  )
 }
 
 function walletExpenseDepositAmount(data: SummaryData): number {
-  if (typeof data.walletExpense.deposit === 'number') {
-    return data.walletExpense.deposit
-  }
-  return data.depositWallet?.totalWithdraw ?? 0
+  return data.depositWallet.totalWithdraw
 }
+
+function depositWalletIncomeDetails(data: SummaryData): MetricRow[] {
+  const dep = data.depositWallet.deposit
+  return [
+    {
+      label: `Tunai x ${formatNumber(dep.countDepositCash)} Transaksi`,
+      value: formatCurrency(dep.totalDepositCash),
+    },
+    {
+      label: `Debit x ${formatNumber(dep.countDepositDebit)} Transaksi`,
+      value: formatCurrency(dep.totalDepositDebit),
+    },
+    {
+      label: `QRIS Static x ${formatNumber(dep.countDepositQRStatic)} Transaksi`,
+      value: formatCurrency(dep.totalDepositQRStatic),
+    },
+    {
+      label: `E-Wallet x ${formatNumber(dep.countDepositEWallet)} Transaksi`,
+      value: formatCurrency(dep.totalDepositEWallet),
+    },
+    {
+      label: `Transfer Manual x ${formatNumber(dep.countDepositManualTransfer)} Transaksi`,
+      value: formatCurrency(dep.totalDepositManualTransfer),
+    },
+  ]
+}
+
+const WALLET_EXPENSE_METHODS: (keyof WalletExpenseChannel)[] = [
+  'cash',
+  'nonCash',
+  'debit',
+  'qrisStatic',
+  'manualTransfer',
+  'cityLedger',
+  'onlineFood',
+]
 
 export function getWalletExpenseAmountByMethod(
   data: SummaryData,
   method: keyof WalletExpenseChannel,
 ): number {
-  const direct = Number(data.walletExpense?.[method] ?? 0)
-  const bookClosing = Number(data.walletExpense?.bookClosing?.[method] ?? 0)
-  const other = Number(data.walletExpense?.other?.[method] ?? 0)
-  return direct + bookClosing + other
-}
-
-function totalSettlementAmount(data: SummaryData): number {
   return (
-    Number(data.sales.settlement ?? 0) +
-    Number(data.onlineFood.settlement ?? 0) +
-    Number(data.cityLedger.settlement ?? 0)
+    data.walletExpense.bookClosing[method] + data.walletExpense.other[method]
   )
 }
 
-function totalXenditFeeFromBreakdown(data: SummaryData): number {
-  const breakdown = data.xenditFee
-  if (!breakdown) return 0
-  return (
-    Number(breakdown.eWallet?.amount ?? 0) +
-    Number(breakdown.qris?.amount ?? 0) +
-    Number(breakdown.virtualAccount?.amount ?? 0) +
-    Number(breakdown.visa?.amount ?? 0)
+function totalWalletExpenseAmount(data: SummaryData): number {
+  const channels = WALLET_EXPENSE_METHODS.reduce(
+    (sum, method) => sum + getWalletExpenseAmountByMethod(data, method),
+    0,
   )
+  return channels + data.depositWallet.totalWithdraw
 }
 
 // --- Env & format ---
@@ -569,45 +567,71 @@ export type ReportMetrics = {
 }
 
 function computeMetrics(data: SummaryData): ReportMetrics {
+  const { sales, onlineFood, cityLedger, compliment, walletIncome, walletExpense } =
+    data
+
+  const salesPlatformFeeByCustomer = sales.platformFeeByCustomer
+  const onlineFoodPlatformFeeByCustomer = onlineFood.platformFeeByCustomer
+  const cityLedgerPlatformFeeByCustomer = cityLedger.platformFeeByCustomer
+  const complimentPlatformFeeByCustomer = compliment.platformFeeByCustomer
+
+  const salesPlatformFeeByCafe = sales.platformFeeByCafe
+  const onlineFoodPlatformFeeByCafe = onlineFood.platformFeeByCafe
+  const cityLedgerPlatformFeeByCafe = cityLedger.platformFeeByCafe
+  const complimentPlatformFeeByCafe = compliment.platformFeeByCafe
+
   const grossSales =
-    (data.sales.productSoldTotal || 0) -
-    (data.sales.discount || 0) +
-    (data.sales.tax || 0) +
-    getBlockPlatformFeeByCustomer(data.sales) +
-    (data.sales.serviceFee || 0) +
-    (data.sales.multipriceFee || 0) +
-    (data.sales.rounding || 0)
+    (sales.productSoldTotal || 0) -
+    (sales.discount || 0) +
+    (sales.tax || 0) +
+    salesPlatformFeeByCustomer +
+    (sales.serviceFee || 0) +
+    (sales.multipriceFee || 0) +
+    (sales.rounding || 0)
 
   const grossSalesOnlineFood =
-    (data.onlineFood.productSoldTotal || 0) -
-    (data.onlineFood.discount || 0) +
-    getBlockPlatformFeeByCustomer(data.onlineFood) +
-    (data.onlineFood.multipriceFee || 0) +
-    (data.onlineFood.rounding || 0)
+    (onlineFood.productSoldTotal || 0) -
+    (onlineFood.discount || 0) +
+    onlineFoodPlatformFeeByCustomer +
+    (onlineFood.multipriceFee || 0) +
+    (onlineFood.rounding || 0)
 
   const grossCityLedger =
-    (data.cityLedger.productSoldTotal || 0) -
-    (data.cityLedger.discount || 0) +
-    (data.cityLedger.tax || 0) +
-    getBlockPlatformFeeByCustomer(data.cityLedger) +
-    (data.cityLedger.serviceFee || 0) +
-    (data.cityLedger.multipriceFee || 0) +
-    (data.cityLedger.rounding || 0)
+    (cityLedger.productSoldTotal || 0) -
+    (cityLedger.discount || 0) +
+    (cityLedger.tax || 0) +
+    cityLedgerPlatformFeeByCustomer +
+    (cityLedger.serviceFee || 0) +
+    (cityLedger.multipriceFee || 0) +
+    (cityLedger.rounding || 0)
 
   const grossCompliment =
-    (data.compliment.productSoldTotal || 0) -
-    (data.compliment.discount || 0) +
-    (data.compliment.tax || 0) +
-    getBlockPlatformFeeByCustomer(data.compliment) +
-    (data.compliment.serviceFee || 0) +
-    (data.compliment.multipriceFee || 0) +
-    (data.compliment.rounding || 0)
+    compliment.productSoldTotal +
+    complimentPlatformFeeByCustomer +
+    compliment.rounding
+
+  const salesOrderGeneralAndSplit =
+    (sales.orderGeneralCount || 0) + (sales.orderSplitBillCount || 0)
+  const salesOrderCount =
+    salesOrderGeneralAndSplit > 0
+      ? salesOrderGeneralAndSplit
+      : (sales.orderDineInCount || 0) +
+        (sales.orderTakeAwayCount || 0) +
+        (sales.orderDeliveryCount || 0)
+
+  const cityLedgerOrderGeneralAndSplit =
+    (cityLedger.orderGeneralCount || 0) + (cityLedger.orderSplitBillCount || 0)
+  const cityLedgerOrderCount =
+    cityLedgerOrderGeneralAndSplit > 0
+      ? cityLedgerOrderGeneralAndSplit
+      : (cityLedger.orderDineInCount || 0) +
+        (cityLedger.orderTakeAwayCount || 0) +
+        (cityLedger.orderDeliveryCount || 0)
 
   const statisticsGrossSales = grossSales + grossCityLedger
-  const statisticsTotalBill =
-    getOrderCountByBlock(data.sales) + getOrderCountByBlock(data.cityLedger)
+  const statisticsTotalBill = salesOrderCount + cityLedgerOrderCount
   const statisticsTotalGuest =
-    (data.sales.guestCount || 0) + (data.cityLedger.guestCount || 0)
+    (sales.guestCount || 0) + (cityLedger.guestCount || 0)
   const avgAmountPerGuest = statisticsTotalGuest
     ? statisticsGrossSales / statisticsTotalGuest
     : 0
@@ -615,23 +639,44 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     ? statisticsGrossSales / statisticsTotalBill
     : 0
 
-  const totalPlatformFeeBilling = totalPlatformFeeBillingAmount(data)
-  const totalPlatformFeeCustomer = totalPlatformFeeCustomerAmount(data)
+  const totalPlatformFeeCustomer =
+    salesPlatformFeeByCustomer +
+    onlineFoodPlatformFeeByCustomer +
+    cityLedgerPlatformFeeByCustomer +
+    complimentPlatformFeeByCustomer
+
+  const totalPlatformFeeBilling =
+    salesPlatformFeeByCustomer +
+    salesPlatformFeeByCafe +
+    onlineFoodPlatformFeeByCustomer +
+    onlineFoodPlatformFeeByCafe +
+    cityLedgerPlatformFeeByCustomer +
+    cityLedgerPlatformFeeByCafe +
+    complimentPlatformFeeByCustomer +
+    complimentPlatformFeeByCafe
+
   const totalPlatformFee = totalPlatformFeeBilling
 
   const totalMultipriceFee =
-    (data.sales?.multipriceFee || 0) +
-    (data.compliment?.multipriceFee || 0) +
-    (data.onlineFood?.multipriceFee || 0) +
-    (data.cityLedger?.multipriceFee || 0)
+    sales.multipriceFee +
+    onlineFood.multipriceFee +
+    cityLedger.multipriceFee
 
   const totalXenditFeeByChannel =
-    (data.sales?.xenditFee || 0) +
-    (data.cityLedger?.xenditFee || 0) +
-    (data.onlineFood?.xenditFee || 0) +
-    (data.compliment?.xenditFee || 0)
-  const totalXenditFee =
-    totalXenditFeeFromBreakdown(data) || totalXenditFeeByChannel
+    (sales.xenditFee || 0) +
+    (cityLedger.xenditFee || 0) +
+    (onlineFood.xenditFee || 0) +
+    (compliment.xenditFee || 0)
+
+  const xenditBreakdown = data.xenditFee
+  const totalXenditFeeFromBreakdown = xenditBreakdown
+    ? Number(xenditBreakdown.eWallet?.amount ?? 0) +
+      Number(xenditBreakdown.qris?.amount ?? 0) +
+      Number(xenditBreakdown.virtualAccount?.amount ?? 0) +
+      Number(xenditBreakdown.visa?.amount ?? 0)
+    : 0
+
+  const totalXenditFee = totalXenditFeeFromBreakdown || totalXenditFeeByChannel
 
   const totalDepositDeduction = Number(data.totalDepositDeduction ?? 0)
 
@@ -646,42 +691,45 @@ function computeMetrics(data: SummaryData): ReportMetrics {
 
   const grossRevenue = totalGrossSales
   const cogs =
-    (data.sales.cogs || 0) +
-    (data.onlineFood.cogs || 0) +
-    (data.cityLedger.cogs || 0) +
-    (data.compliment.cogs || 0)
+    (sales.cogs || 0) +
+    (onlineFood.cogs || 0) +
+    (cityLedger.cogs || 0) +
+    (compliment.cogs || 0)
   const salesRevenue = grossRevenue - cogs
   const rounding =
-    (data.sales.rounding || 0) +
-    (data.onlineFood.rounding || 0) +
-    (data.cityLedger.rounding || 0) +
-    (data.compliment.rounding || 0)
+    (sales.rounding || 0) +
+    (onlineFood.rounding || 0) +
+    (cityLedger.rounding || 0) +
+    (compliment.rounding || 0)
   const totalSalesRevenue = salesRevenue
-  const loss = data?.loss || 0
+  const loss = data.loss || 0
   const totalNetRevenue = totalSalesRevenue - loss
 
-  const depositIncomeTotal = totalDepositIncomeFromWallet(data)
+  const depositWallet = data.depositWallet.deposit
+  const depositIncomeTotal =
+    depositWallet.totalDepositCash +
+    depositWallet.totalDepositDebit +
+    depositWallet.totalDepositQRStatic +
+    depositWallet.totalDepositEWallet +
+    depositWallet.totalDepositManualTransfer
+
+  const settlement =
+    Number(sales.settlement ?? 0) +
+    Number(onlineFood.settlement ?? 0) +
+    Number(cityLedger.settlement ?? 0)
 
   const totalWalletIncome =
-    (data.walletIncome.cashAmount || 0) +
-    (data.walletIncome.nonCashAmount || 0) +
-    (data.walletIncome.debitAmount || 0) +
-    (data.walletIncome.qrisStaticAmount || 0) +
-    (data.walletIncome.manualTransferAmount || 0) +
-    (data.walletIncome.onlineFoodAmount || 0) +
-    (data.walletIncome.cityLedgerAmount || 0) +
+    (walletIncome.cashAmount || 0) +
+    (walletIncome.nonCashAmount || 0) +
+    (walletIncome.debitAmount || 0) +
+    (walletIncome.qrisStaticAmount || 0) +
+    (walletIncome.manualTransferAmount || 0) +
+    (walletIncome.onlineFoodAmount || 0) +
+    (walletIncome.cityLedgerAmount || 0) +
     depositIncomeTotal +
-    totalSettlementAmount(data)
+    settlement
 
-  const totalWalletExpense =
-    getWalletExpenseAmountByMethod(data, 'cash') +
-    getWalletExpenseAmountByMethod(data, 'nonCash') +
-    getWalletExpenseAmountByMethod(data, 'debit') +
-    getWalletExpenseAmountByMethod(data, 'qrisStatic') +
-    getWalletExpenseAmountByMethod(data, 'manualTransfer') +
-    getWalletExpenseAmountByMethod(data, 'cityLedger') +
-    getWalletExpenseAmountByMethod(data, 'onlineFood') +
-    walletExpenseDepositAmount(data)
+  const totalWalletExpense = totalWalletExpenseAmount(data)
 
   return {
     grossSales,
@@ -708,7 +756,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     totalNetRevenue,
     totalWalletIncome,
     totalWalletExpense,
-    totalSettlement: totalSettlementAmount(data),
+    totalSettlement: settlement,
   }
 }
 
@@ -1082,17 +1130,11 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
   }
 }
 
-type ChannelSlice = Pick<
-  SalesBlock,
-  | 'orderGeneralCount'
-  | 'orderSplitBillCount'
-  | 'orderDineInCount'
-  | 'orderTakeAwayCount'
-  | 'orderDeliveryCount'
-  | 'productNormalSoldTotal'
-  | 'productCustomAmountSoldTotal'
-  | 'multiprices'
->
+type ChannelSlice = OrderCountFields & {
+  productNormalSoldTotal: number
+  productCustomAmountSoldTotal: number
+  multiprices: MultipriceEntry[]
+}
 
 function getOrderDetails(block: ChannelSlice): MetricRow[] {
   const details: MetricRow[] = [
@@ -1339,10 +1381,9 @@ function multipriceFeeDetails(data: SummaryData): MetricRow[] {
   if (rows.length > 0) return rows
 
   const totalMultiprice =
-    (data.sales.multipriceFee || 0) +
-    (data.onlineFood.multipriceFee || 0) +
-    (data.cityLedger.multipriceFee || 0) +
-    (data.compliment.multipriceFee || 0)
+    data.sales.multipriceFee +
+    data.onlineFood.multipriceFee +
+    data.cityLedger.multipriceFee
 
   if (totalMultiprice > 0) {
     return [
@@ -1430,52 +1471,10 @@ export function calculateReportV1(data: SummaryData) {
         }
       }
       if (row.label === 'Deposit') {
-        const dep = data.depositWallet?.deposit
-        if (dep) {
-          return {
-            ...row,
-            key: 'wallet-income-deposit',
-            details: [
-              {
-                label: `Tunai x ${formatNumber(dep.countDepositCash)} Transaksi`,
-                value: formatCurrency(dep.totalDepositCash || 0),
-              },
-              {
-                label: `Debit x ${formatNumber(dep.countDepositDebit)} Transaksi`,
-                value: formatCurrency(dep.totalDepositDebit || 0),
-              },
-              {
-                label: `QRIS Static x ${formatNumber(dep.countDepositQRStatic)} Transaksi`,
-                value: formatCurrency(dep.totalDepositQRStatic || 0),
-              },
-              {
-                label: `E-Wallet x ${formatNumber(dep.countDepositEWallet)} Transaksi`,
-                value: formatCurrency(dep.totalDepositEWallet || 0),
-              },
-              {
-                label: `Transfer Manual x ${formatNumber(dep.countDepositManualTransfer)} Transaksi`,
-                value: formatCurrency(dep.totalDepositManualTransfer || 0),
-              },
-            ],
-          }
-        }
-        const depositCount = data.walletIncome.depositCount || 0
         return {
           ...row,
           key: 'wallet-income-deposit',
-          details: [
-            {
-              label: `Tunai x ${formatNumber(depositCount)} Transaksi`,
-              value: formatCurrency(data.walletIncome.depositAmount || 0),
-            },
-            { label: 'Non Tunai x 0 Transaksi', value: formatCurrency(0) },
-            { label: 'Debit x 0 Transaksi', value: formatCurrency(0) },
-            { label: 'QRIS Static x 0 Transaksi', value: formatCurrency(0) },
-            {
-              label: 'Transfer Manual x 0 Transaksi',
-              value: formatCurrency(0),
-            },
-          ],
+          details: depositWalletIncomeDetails(data),
         }
       }
       return { ...row, key: `wallet-income-${row.label}` }
@@ -1593,49 +1592,10 @@ function walletIncomeExpandableRowsV2(
       }
     }
     if (row.label === 'Deposit') {
-      const dep = data.depositWallet?.deposit
-      if (dep) {
-        return {
-          ...row,
-          key: 'wallet-income-deposit',
-          details: [
-            {
-              label: `Tunai x ${formatNumber(dep.countDepositCash)} Transaksi`,
-              value: formatCurrency(dep.totalDepositCash || 0),
-            },
-            {
-              label: `Debit x ${formatNumber(dep.countDepositDebit)} Transaksi`,
-              value: formatCurrency(dep.totalDepositDebit || 0),
-            },
-            {
-              label: `QRIS Static x ${formatNumber(dep.countDepositQRStatic)} Transaksi`,
-              value: formatCurrency(dep.totalDepositQRStatic || 0),
-            },
-            {
-              label: `E-Wallet x ${formatNumber(dep.countDepositEWallet)} Transaksi`,
-              value: formatCurrency(dep.totalDepositEWallet || 0),
-            },
-            {
-              label: `Transfer Manual x ${formatNumber(dep.countDepositManualTransfer)} Transaksi`,
-              value: formatCurrency(dep.totalDepositManualTransfer || 0),
-            },
-          ],
-        }
-      }
-      const depositCount = data.walletIncome.depositCount || 0
       return {
         ...row,
         key: 'wallet-income-deposit',
-        details: [
-          {
-            label: `Tunai x ${formatNumber(depositCount)} Transaksi`,
-            value: formatCurrency(data.walletIncome.depositAmount || 0),
-          },
-          { label: 'Non Tunai x 0 Transaksi', value: formatCurrency(0) },
-          { label: 'Debit x 0 Transaksi', value: formatCurrency(0) },
-          { label: 'QRIS Static x 0 Transaksi', value: formatCurrency(0) },
-          { label: 'Transfer Manual x 0 Transaksi', value: formatCurrency(0) },
-        ],
+        details: depositWalletIncomeDetails(data),
       }
     }
     return { ...row, key: `wallet-income-${row.label}` }

@@ -851,17 +851,7 @@ export default function SummaryV2Page() {
                   {
                     key: 'bookClosing' as const,
                     label: 'Tutup Buku',
-                    data:
-                      data.walletExpense.bookClosing ?? {
-                        cash: data.walletExpense.cash,
-                        nonCash: data.walletExpense.nonCash,
-                        debit: data.walletExpense.debit,
-                        qrisStatic: data.walletExpense.qrisStatic,
-                        manualTransfer: data.walletExpense.manualTransfer,
-                        onlineFood: data.walletExpense.onlineFood,
-                        cityLedger: data.walletExpense.cityLedger,
-                        deposit: data.walletExpense.deposit,
-                      },
+                    data: data.walletExpense.bookClosing,
                   },
                   {
                     key: 'other' as const,
@@ -878,8 +868,7 @@ export default function SummaryV2Page() {
                   Number(group.data.qrisStatic ?? 0) +
                   Number(group.data.manualTransfer ?? 0) +
                   Number(group.data.onlineFood ?? 0) +
-                  Number(group.data.cityLedger ?? 0) +
-                  Number(group.data.deposit ?? 0)
+                  Number(group.data.cityLedger ?? 0)
                 return (
                   <div key={group.key}>
                     <div className="flex items-start justify-between gap-4 px-4 py-3.5">
@@ -963,12 +952,6 @@ export default function SummaryV2Page() {
                           <span className="text-neutral-600">Online Food</span>
                           <span className="font-semibold tabular-nums text-red-600">
                             {formatCurrency(Number(group.data.onlineFood ?? 0), true)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-neutral-600">Deposit</span>
-                          <span className="font-semibold tabular-nums text-red-600">
-                            {formatCurrency(Number(group.data.deposit ?? 0), true)}
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
@@ -1137,16 +1120,8 @@ export default function SummaryV2Page() {
                 }
               />
               <RowLine
-                label="Service Fee"
-                value={formatCurrency(data.onlineFood.serviceFee || 0)}
-              />
-              <RowLine
                 label="Multi-Price Fee"
                 value={formatCurrency(data.onlineFood.multipriceFee || 0)}
-              />
-              <RowLine
-                label="Pajak"
-                value={formatCurrency(data.onlineFood.tax || 0)}
               />
               <RowLine
                 label="Pembulatan"
