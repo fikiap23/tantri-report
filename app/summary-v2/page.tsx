@@ -15,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CollapsiblePlatformFeeCard } from '@/components/report/collapsible-platform-fee-card'
 import { ReportViewToggle } from '@/components/report-view-toggle'
 import { cn } from '@/lib/utils'
 import {
@@ -26,6 +27,7 @@ import {
   formatCurrency,
   formatDateForInput,
   formatNumber,
+  getBlockPlatformFeeByCustomer,
   getOrderCountByBlock,
 } from '@/lib/report-calculations'
 
@@ -150,177 +152,6 @@ function KpiCard({
   )
 }
 
-function CollapsiblePlatformFeeCard({
-  data,
-  defaultOpen = false,
-}: {
-  data: SummaryData
-  defaultOpen?: boolean
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    sales: true,
-    onlineFood: true,
-    cityLedger: true,
-  })
-  const details = useMemo(() => {
-    function buildChannelRows(
-      label: string,
-      key: 'sales' | 'onlineFood' | 'cityLedger',
-      items: SummaryData['platformFeeBreakdown']['sales'],
-    ) {
-      const hasApiData = Array.isArray(items) && items.length > 0
-      const rows = hasApiData
-        ? items.map((item) => ({
-            label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
-            value: formatCurrency((item.price || 0) * (item.count || 0)),
-          }))
-        : [{ label: `Breakdown ${label} (belum ada di API)`, value: '-' }]
-      const total = hasApiData
-        ? items.reduce(
-            (sum, item) => sum + (item.price || 0) * (item.count || 0),
-            0,
-          )
-        : 0
-      return { key, label, rows, total, hasApiData }
-    }
-
-    const sales = buildChannelRows(
-      'Penjualan',
-      'sales',
-      data.platformFeeBreakdown.sales,
-    )
-    const onlineFood = buildChannelRows(
-      'Online Food',
-      'onlineFood',
-      data.platformFeeBreakdown.onlineFood,
-    )
-    const cityLedger = buildChannelRows(
-      'City Ledger',
-      'cityLedger',
-      data.platformFeeBreakdown.cityLedger,
-    )
-    const complimentBreakdown = data.platformFeeBreakdown.compliment
-    const complimentFee =
-      typeof complimentBreakdown === 'number'
-        ? complimentBreakdown
-        : Number(complimentBreakdown?.fee || 0)
-    const complimentCount =
-      typeof complimentBreakdown === 'object'
-        ? Number(complimentBreakdown?.count || 0)
-        : 0
-    const compliment = {
-      label: complimentFee > 0 ? 'Platform Fee Compliment' : 'Platform Fee Compliment (belum ada di API)',
-      value:
-        complimentFee > 0
-          ? `${formatCurrency(complimentFee)}${complimentCount > 0 ? ` (${formatNumber(complimentCount)} Transaksi)` : ''}`
-          : '-',
-      total: complimentFee > 0 ? complimentFee : 0,
-    }
-    const total =
-      sales.total + onlineFood.total + cityLedger.total + compliment.total
-    return { sections: [sales, onlineFood, cityLedger], compliment, total }
-  }, [data])
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between border-b border-neutral-200 bg-neutral-100 px-4 py-3 text-left"
-      >
-        <span className="text-sm font-bold text-neutral-900">
-          Tagihan Platform Fee
-        </span>
-        <ChevronDown
-          className={cn(
-            'h-4 w-4 text-neutral-600 transition',
-            open && 'rotate-180',
-          )}
-        />
-      </button>
-      {open && (
-        <div className="divide-y divide-neutral-200">
-          {details.sections.map((section) => {
-            const isOpen = expandedSections[section.key] ?? false
-            return (
-              <div key={section.key}>
-                <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedSections((prev) => ({
-                          ...prev,
-                          [section.key]: !isOpen,
-                        }))
-                      }
-                      className="text-neutral-500"
-                    >
-                      {isOpen ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </button>
-                    <span className="font-semibold text-neutral-900">
-                      {`Platform Fee ${section.label}`}
-                    </span>
-                  </div>
-                  <span className="font-semibold text-neutral-900">
-                    {formatCurrency(section.total)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedSections((prev) => ({
-                      ...prev,
-                      [section.key]: !isOpen,
-                    }))
-                  }
-                  className={cn('px-4 pb-1 text-xs font-medium', accent)}
-                >
-                  {isOpen ? 'Sembunyikan' : 'Selengkapnya'}
-                </button>
-                {isOpen && (
-                  <div className="space-y-1 bg-neutral-50/80 px-4 py-2">
-                    {section.rows.map((row, i) => (
-                      <div
-                        key={`${section.key}-${i}`}
-                        className="flex items-center justify-between gap-4 text-sm"
-                      >
-                        <span className="text-neutral-600">{row.label}</span>
-                        <span className="font-medium tabular-nums text-neutral-900">
-                          {row.value}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-          <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
-            <span className="text-neutral-600">{details.compliment.label}</span>
-            <span className="font-semibold text-neutral-900">
-              {details.compliment.value}
-            </span>
-          </div>
-          <DottedRule />
-          <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
-            <span className="font-bold text-neutral-900">
-              Total Tagihan Platform Fee
-            </span>
-            <span className="font-bold text-neutral-900">
-              {formatCurrency(details.total)}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function V2ReservationBlock({
   reservation,
@@ -719,6 +550,7 @@ export default function SummaryV2Page() {
                 const isOpen = expandedSales[row.key] ?? false
                 const isOrder = row.label === 'Total Pesanan'
                 const isProduct = row.label === 'Total Produk Terjual'
+                const isPlatformFee = row.label === 'Platform Fee'
 
                 if (isTotal) {
                   return (
@@ -742,9 +574,11 @@ export default function SummaryV2Page() {
                       label={
                         row.label === 'Jumlah Produk Terjual'
                           ? 'Jumlah Item Terjual'
-                          : row.label === 'Total Produk Terjual'
-                            ? 'Total Penjualan Produk'
-                            : row.label
+                          : row.label === 'Total Pesanan'
+                            ? 'Jumlah Transaksi'
+                            : row.label === 'Total Produk Terjual'
+                              ? 'Total Penjualan Produk'
+                              : row.label
                       }
                       sublabel={
                         isOrder || isProduct
@@ -760,7 +594,17 @@ export default function SummaryV2Page() {
                         setExpandedSales((p) => ({ ...p, [row.key]: !isOpen }))
                       }
                       leftAdornment={
-                        hasDetails && (isOrder || isProduct) ? (
+                        isPlatformFee ? (
+                          <span
+                            title="Hanya Platform Fee yang dibebankan ke pelanggan"
+                            className="inline-flex"
+                          >
+                            <Info
+                              className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
+                              aria-hidden
+                            />
+                          </span>
+                        ) : hasDetails && (isOrder || isProduct) ? (
                           <button
                             type="button"
                             aria-expanded={isOpen}
@@ -1279,7 +1123,18 @@ export default function SummaryV2Page() {
               />
               <RowLine
                 label="Platform Fee"
-                value={formatCurrency(data.onlineFood.platformFee || 0)}
+                value={formatCurrency(getBlockPlatformFeeByCustomer(data.onlineFood))}
+                leftAdornment={
+                  <span
+                    title="Hanya Platform Fee yang dibebankan ke pelanggan"
+                    className="inline-flex"
+                  >
+                    <Info
+                      className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
+                      aria-hidden
+                    />
+                  </span>
+                }
               />
               <RowLine
                 label="Service Fee"
@@ -1434,7 +1289,18 @@ export default function SummaryV2Page() {
               />
               <RowLine
                 label="Platform Fee"
-                value={formatCurrency(data.cityLedger.platformFee || 0)}
+                value={formatCurrency(getBlockPlatformFeeByCustomer(data.cityLedger))}
+                leftAdornment={
+                  <span
+                    title="Hanya Platform Fee yang dibebankan ke pelanggan"
+                    className="inline-flex"
+                  >
+                    <Info
+                      className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400"
+                      aria-hidden
+                    />
+                  </span>
+                }
               />
               <RowLine
                 label="Service Fee"
@@ -1628,11 +1494,14 @@ export default function SummaryV2Page() {
                 label="Total Penjualan City Ledger"
                 value={formatCurrency(report.metrics.grossCityLedger)}
               />
+              <RowLine
+                label="Total Tagihan Platform Fee"
+                value={formatCurrency(report.metrics.totalPlatformFeeBilling, true)}
+                valueClassName="text-red-600"
+              />
               {report.revenueExpandableRows
                 .filter((r) =>
-                  ['Platform Fee', 'Multiprice Fee', 'Xendit Fee'].includes(
-                    r.label,
-                  ),
+                  ['Multiprice Fee', 'Xendit Fee'].includes(r.label),
                 )
                 .map((row) => {
                   const hasDetails = Boolean(row.details?.length)

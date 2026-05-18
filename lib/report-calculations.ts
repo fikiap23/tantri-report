@@ -56,7 +56,10 @@ export type SalesBlock = {
   productCustomAmountSoldTotal?: number
   discount?: number
   tax?: number
-  platformFee: number
+  /** Legacy: gabungan fee; API baru memisah byCustomer / byCafe */
+  platformFee?: number
+  platformFeeByCustomer?: number
+  platformFeeByCafe?: number
   serviceFee?: number
   multipriceFee: number
   rounding: number
@@ -65,6 +68,233 @@ export type SalesBlock = {
   guestCount: number
   multiprices?: MultipriceBreakdown[]
   settlement?: number
+}
+
+export type PlatformFeePayer = 'byCustomer' | 'byCafe'
+
+export type PlatformFeeBreakdownChannel = {
+  sales: PriceCount[]
+  onlineFood: PriceCount[]
+  cityLedger: PriceCount[]
+  compliment: number | ComplimentPlatformFeeBreakdown | { count: number }
+}
+
+export type PlatformFeeBreakdownRoot = {
+  byCustomer?: PlatformFeeBreakdownChannel
+  byCafe?: PlatformFeeBreakdownChannel
+  /** Legacy flat shape */
+  sales?: PriceCount[]
+  onlineFood?: PriceCount[]
+  cityLedger?: PriceCount[]
+  compliment?: number | ComplimentPlatformFeeBreakdown | { count: number }
+}
+
+export function getBlockPlatformFeeByCustomer(block: SalesBlock): number {
+  if (typeof block.platformFeeByCustomer === 'number') {
+    return Number(block.platformFeeByCustomer || 0)
+  }
+  return Number(block.platformFee || 0)
+}
+
+export function getBlockPlatformFeeByCafe(block: SalesBlock): number {
+  return Number(block.platformFeeByCafe || 0)
+}
+
+export function getBlockPlatformFeeBilling(block: SalesBlock): number {
+  return getBlockPlatformFeeByCustomer(block) + getBlockPlatformFeeByCafe(block)
+}
+
+function sumPriceCountItems(items: PriceCount[] | undefined): number {
+  return (items || []).reduce(
+    (sum, item) => sum + (item.price || 0) * (item.count || 0),
+    0,
+  )
+}
+
+function isNestedPlatformFeeBreakdown(
+  breakdown: PlatformFeeBreakdownRoot | undefined,
+): breakdown is PlatformFeeBreakdownRoot & {
+  byCustomer: PlatformFeeBreakdownChannel
+} {
+  return Boolean(breakdown?.byCustomer || breakdown?.byCafe)
+}
+
+export function getPlatformFeeBreakdownSlice(
+  data: SummaryData,
+  payer: PlatformFeePayer,
+): PlatformFeeBreakdownChannel {
+  const pb = data.platformFeeBreakdown
+  if (isNestedPlatformFeeBreakdown(pb)) {
+    const slice = payer === 'byCustomer' ? pb.byCustomer : pb.byCafe
+    return (
+      slice ?? {
+        sales: [],
+        onlineFood: [],
+        cityLedger: [],
+        compliment: { count: 0 },
+      }
+    )
+  }
+  if (payer === 'byCustomer') {
+    return {
+      sales: pb.sales ?? [],
+      onlineFood: pb.onlineFood ?? [],
+      cityLedger: pb.cityLedger ?? [],
+      compliment: pb.compliment ?? { count: 0 },
+    }
+  }
+  return {
+    sales: [],
+    onlineFood: [],
+    cityLedger: [],
+    compliment: { count: 0 },
+  }
+}
+
+export function priceCountBreakdownRows(items: PriceCount[]): MetricRow[] {
+  const withActivity = (items || []).filter((item) => (item.count || 0) > 0)
+  if (withActivity.length === 0) {
+    return (items || []).map((item) => ({
+      label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
+      value: formatCurrency((item.price || 0) * (item.count || 0)),
+    }))
+  }
+  return withActivity.map((item) => ({
+    label: `${formatNumber(item.price || 0)} x ${formatNumber(item.count || 0)} Transaksi`,
+    value: formatCurrency((item.price || 0) * (item.count || 0)),
+  }))
+}
+
+export type PlatformFeeBillingChannelRow = {
+  key: string
+  label: string
+  total: number
+  rows: MetricRow[]
+  expandable: boolean
+}
+
+export type PlatformFeeBillingSection = {
+  payer: PlatformFeePayer
+  title: string
+  channels: PlatformFeeBillingChannelRow[]
+  compliment: { label: string; value: string; total: number }
+  total: number
+}
+
+function complimentFeeFromBreakdown(
+  compliment: PlatformFeeBreakdownChannel['compliment'],
+  block: SalesBlock,
+  payer: PlatformFeePayer,
+): number {
+  if (typeof compliment === 'number') return compliment
+  if (compliment && typeof compliment === 'object' && 'fee' in compliment) {
+    return Number(compliment.fee || 0)
+  }
+  return payer === 'byCustomer'
+    ? getBlockPlatformFeeByCustomer(block)
+    : getBlockPlatformFeeByCafe(block)
+}
+
+function complimentCountFromBreakdown(
+  compliment: PlatformFeeBreakdownChannel['compliment'],
+): number {
+  if (typeof compliment === 'object' && compliment && 'count' in compliment) {
+    return Number(compliment.count || 0)
+  }
+  return 0
+}
+
+export function buildPlatformFeeBillingSection(
+  data: SummaryData,
+  payer: PlatformFeePayer,
+): PlatformFeeBillingSection {
+  const slice = getPlatformFeeBreakdownSlice(data, payer)
+  const channelDefs = [
+    {
+      key: 'sales',
+      label: 'Platform Fee Penjualan',
+      items: slice.sales,
+      block: data.sales,
+    },
+    {
+      key: 'onlineFood',
+      label: 'Platform Fee Online Food',
+      items: slice.onlineFood,
+      block: data.onlineFood,
+    },
+    {
+      key: 'cityLedger',
+      label: 'Platform Fee Online City Ledger',
+      items: slice.cityLedger,
+      block: data.cityLedger,
+    },
+  ] as const
+
+  const channels: PlatformFeeBillingChannelRow[] = channelDefs.map((ch) => {
+    const fromBreakdown = sumPriceCountItems(ch.items)
+    const fromBlock =
+      payer === 'byCustomer'
+        ? getBlockPlatformFeeByCustomer(ch.block)
+        : getBlockPlatformFeeByCafe(ch.block)
+    const total = fromBreakdown > 0 ? fromBreakdown : fromBlock
+    const rows = priceCountBreakdownRows(ch.items || [])
+    return {
+      key: ch.key,
+      label: ch.label,
+      total,
+      rows,
+      expandable: rows.length > 0,
+    }
+  })
+
+  const complimentFee = complimentFeeFromBreakdown(
+    slice.compliment,
+    data.compliment,
+    payer,
+  )
+  const complimentCount = complimentCountFromBreakdown(slice.compliment)
+  const compliment = {
+    label: 'Platform Fee Compliment',
+    value:
+      complimentFee > 0
+        ? formatCurrency(complimentFee)
+        : complimentCount > 0
+          ? `${formatNumber(complimentCount)} Transaksi`
+          : formatCurrency(0),
+    total: complimentFee,
+  }
+
+  const total =
+    channels.reduce((sum, ch) => sum + ch.total, 0) + compliment.total
+
+  return {
+    payer,
+    title:
+      payer === 'byCustomer'
+        ? 'Dibebankan ke Pelanggan'
+        : 'Dibebankan ke Merchant',
+    channels,
+    compliment,
+    total,
+  }
+}
+
+export function totalPlatformFeeBillingAmount(data: SummaryData): number {
+  return (
+    getBlockPlatformFeeBilling(data.sales) +
+    getBlockPlatformFeeBilling(data.onlineFood) +
+    getBlockPlatformFeeBilling(data.cityLedger) +
+    getBlockPlatformFeeBilling(data.compliment)
+  )
+}
+
+export function totalPlatformFeeCustomerAmount(data: SummaryData): number {
+  return (
+    getBlockPlatformFeeByCustomer(data.sales) +
+    getBlockPlatformFeeByCustomer(data.onlineFood) +
+    getBlockPlatformFeeByCustomer(data.cityLedger) +
+    getBlockPlatformFeeByCustomer(data.compliment)
+  )
 }
 
 export function getOrderCountByBlock(
@@ -177,12 +407,7 @@ export type SummaryData = {
   compliment: SalesBlock & {
     complimentAmount?: number
   }
-  platformFeeBreakdown: {
-    sales: PriceCount[]
-    onlineFood: PriceCount[]
-    cityLedger: PriceCount[]
-    compliment: number | ComplimentPlatformFeeBreakdown
-  }
+  platformFeeBreakdown: PlatformFeeBreakdownRoot
   xenditFee?: XenditFeeBreakdown
   reservation: {
     waiting: ReservationState
@@ -282,20 +507,16 @@ function totalXenditFeeFromBreakdown(data: SummaryData): number {
 }
 
 function getComplimentPlatformFee(data: SummaryData): number {
-  const compliment = data.platformFeeBreakdown?.compliment
-  if (typeof compliment === 'number') return Number(compliment || 0)
-  if (compliment && typeof compliment === 'object') {
-    return Number(compliment.fee || 0)
-  }
-  return Number(data.compliment?.platformFee || 0)
+  return getBlockPlatformFeeBilling(data.compliment)
 }
 
 function getComplimentPlatformFeeCount(data: SummaryData): number {
-  const compliment = data.platformFeeBreakdown?.compliment
-  if (compliment && typeof compliment === 'object') {
-    return Number(compliment.count || 0)
-  }
-  return 0
+  const byCustomer = getPlatformFeeBreakdownSlice(data, 'byCustomer').compliment
+  const byCafe = getPlatformFeeBreakdownSlice(data, 'byCafe').compliment
+  return (
+    complimentCountFromBreakdown(byCustomer) +
+    complimentCountFromBreakdown(byCafe)
+  )
 }
 
 // --- Env & format ---
@@ -349,6 +570,9 @@ export type ReportMetrics = {
   avgAmountPerGuest: number
   avgAmountPerBill: number
   totalPlatformFee: number
+  /** Total tagihan platform fee (pelanggan + merchant) */
+  totalPlatformFeeBilling: number
+  totalPlatformFeeCustomer: number
   totalMultipriceFee: number
   totalXenditFee: number
   totalGrossSales: number
@@ -369,7 +593,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.sales.productSoldTotal || 0) -
     (data.sales.discount || 0) +
     (data.sales.tax || 0) +
-    (data.sales.platformFee || 0) +
+    getBlockPlatformFeeByCustomer(data.sales) +
     (data.sales.serviceFee || 0) +
     (data.sales.multipriceFee || 0) +
     (data.sales.rounding || 0)
@@ -377,7 +601,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
   const grossSalesOnlineFood =
     (data.onlineFood.productSoldTotal || 0) -
     (data.onlineFood.discount || 0) +
-    (data.onlineFood.platformFee || 0) +
+    getBlockPlatformFeeByCustomer(data.onlineFood) +
     (data.onlineFood.multipriceFee || 0) +
     (data.onlineFood.rounding || 0)
 
@@ -385,7 +609,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.cityLedger.productSoldTotal || 0) -
     (data.cityLedger.discount || 0) +
     (data.cityLedger.tax || 0) +
-    (data.cityLedger.platformFee || 0) +
+    getBlockPlatformFeeByCustomer(data.cityLedger) +
     (data.cityLedger.serviceFee || 0) +
     (data.cityLedger.multipriceFee || 0) +
     (data.cityLedger.rounding || 0)
@@ -394,7 +618,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (data.compliment.productSoldTotal || 0) -
     (data.compliment.discount || 0) +
     (data.compliment.tax || 0) +
-    (data.compliment.platformFee || 0) +
+    getBlockPlatformFeeByCustomer(data.compliment) +
     (data.compliment.serviceFee || 0) +
     (data.compliment.multipriceFee || 0) +
     (data.compliment.rounding || 0)
@@ -411,11 +635,9 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     ? statisticsGrossSales / statisticsTotalBill
     : 0
 
-  const totalPlatformFee =
-    (data.sales?.platformFee || 0) +
-    (data.cityLedger?.platformFee || 0) +
-    (data.onlineFood?.platformFee || 0) +
-    (data.compliment.platformFee || 0)
+  const totalPlatformFeeBilling = totalPlatformFeeBillingAmount(data)
+  const totalPlatformFeeCustomer = totalPlatformFeeCustomerAmount(data)
+  const totalPlatformFee = totalPlatformFeeBilling
 
   const totalMultipriceFee =
     (data.sales?.multipriceFee || 0) +
@@ -437,7 +659,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     grossSales +
     grossSalesOnlineFood +
     grossCityLedger -
-    totalPlatformFee -
+    totalPlatformFeeBilling -
     totalMultipriceFee -
     totalXenditFee -
     totalDepositDeduction
@@ -492,6 +714,8 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     avgAmountPerGuest,
     avgAmountPerBill,
     totalPlatformFee,
+    totalPlatformFeeBilling,
+    totalPlatformFeeCustomer,
     totalMultipriceFee,
     totalXenditFee,
     totalGrossSales,
@@ -543,7 +767,8 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       { label: 'Pajak', value: formatCurrency(data.sales.tax || 0) },
       {
         label: 'Platform Fee',
-        value: formatCurrency(data.sales.platformFee || 0),
+        value: formatCurrency(getBlockPlatformFeeByCustomer(data.sales)),
+        hint: 'Hanya Platform Fee yang dibebankan ke pelanggan',
       },
       {
         label: 'Service Fee',
@@ -637,7 +862,8 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       { label: 'Pajak', value: formatCurrency(data.cityLedger.tax || 0) },
       {
         label: 'Platform Fee',
-        value: formatCurrency(data.cityLedger.platformFee || 0),
+        value: formatCurrency(getBlockPlatformFeeByCustomer(data.cityLedger)),
+        hint: 'Hanya Platform Fee yang dibebankan ke pelanggan',
       },
       {
         label: 'Service Fee',
@@ -676,7 +902,8 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
       },
       {
         label: 'Platform Fee',
-        value: formatCurrency(data.onlineFood.platformFee || 0),
+        value: formatCurrency(getBlockPlatformFeeByCustomer(data.onlineFood)),
+        hint: 'Hanya Platform Fee yang dibebankan ke pelanggan',
       },
       {
         label: 'Multiprice Fee',
@@ -702,10 +929,9 @@ function buildSectionRows(data: SummaryData, m: ReportMetrics): SectionRows {
         value: formatCurrency(m.grossCityLedger),
       },
       {
-        label: 'Platform Fee',
-        value: formatCurrency(m.totalPlatformFee, true),
+        label: 'Total Tagihan Platform Fee',
+        value: formatCurrency(m.totalPlatformFeeBilling, true),
         negative: true,
-        hint: 'Lihat Selengkapnya',
       },
       {
         label: 'Multiprice Fee',
@@ -1044,38 +1270,20 @@ function expandOrderProductChannelRows(
 }
 
 function platformFeeRevenueDetails(data: SummaryData): MetricRow[] {
-  const platformFeeMap = new Map<number, number>()
-  const all = [
-    ...data.platformFeeBreakdown.sales,
-    ...data.platformFeeBreakdown.onlineFood,
-    ...data.platformFeeBreakdown.cityLedger,
-  ]
-  for (const item of all) {
-    platformFeeMap.set(
-      item.price,
-      (platformFeeMap.get(item.price) || 0) + (item.count || 0),
-    )
-  }
-  const details = [...platformFeeMap.entries()]
-    .sort((a, b) => a[0] - b[0])
-    .map(([price, count]) => ({
-      label: `${formatNumber(price)} x ${formatNumber(count)} Transaksi`,
-      value: formatCurrency(price * count, true),
-      negative: true as const,
-    }))
-  const complimentPlatformFee = getComplimentPlatformFee(data)
-  const complimentCount = getComplimentPlatformFeeCount(data)
-  if (complimentPlatformFee > 0) {
-    details.push({
-      label:
-        complimentCount > 0
-          ? `Compliment x ${formatNumber(complimentCount)} Transaksi`
-          : 'Compliment',
-      value: formatCurrency(complimentPlatformFee, true),
+  const customer = buildPlatformFeeBillingSection(data, 'byCustomer')
+  const merchant = buildPlatformFeeBillingSection(data, 'byCafe')
+  return [
+    {
+      label: customer.title,
+      value: formatCurrency(customer.total, true),
       negative: true,
-    })
-  }
-  return details
+    },
+    {
+      label: merchant.title,
+      value: formatCurrency(merchant.total, true),
+      negative: true,
+    },
+  ]
 }
 
 function xenditFeeDetails(data: SummaryData): MetricRow[] {
@@ -1203,7 +1411,10 @@ export function calculateReportV1(data: SummaryData) {
 
   const revenueExpandableRows: ExpandableMetricRow[] = sections.revenueRows.map(
     (row) => {
-      if (row.label === 'Platform Fee') {
+      if (
+        row.label === 'Platform Fee' ||
+        row.label === 'Total Tagihan Platform Fee'
+      ) {
         return {
           ...row,
           key: 'revenue-platform-fee',
@@ -1335,7 +1546,7 @@ function complimentExpandableRows(data: SummaryData): ExpandableMetricRow[] {
     },
     {
       label: 'Platform Fee',
-      value: formatCurrency(c.platformFee || 0),
+      value: formatCurrency(getBlockPlatformFeeByCustomer(c)),
       key: 'cmp-pf',
     },
   ]
@@ -1346,7 +1557,10 @@ function revenueExpandableRowsV2(
   data: SummaryData,
 ): ExpandableMetricRow[] {
   return revenueRows.map((row) => {
-    if (row.label === 'Platform Fee') {
+    if (
+      row.label === 'Platform Fee' ||
+      row.label === 'Total Tagihan Platform Fee'
+    ) {
       return {
         ...row,
         key: 'revenue-platform-fee',
