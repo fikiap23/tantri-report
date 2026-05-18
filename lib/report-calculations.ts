@@ -499,19 +499,6 @@ function totalXenditFeeFromBreakdown(data: SummaryData): number {
   )
 }
 
-function getComplimentPlatformFee(data: SummaryData): number {
-  return getBlockPlatformFeeBilling(data.compliment)
-}
-
-function getComplimentPlatformFeeCount(data: SummaryData): number {
-  const byCustomer = getPlatformFeeBreakdownSlice(data, 'byCustomer').compliment
-  const byCafe = getPlatformFeeBreakdownSlice(data, 'byCafe').compliment
-  return (
-    complimentCountFromBreakdown(byCustomer) +
-    complimentCountFromBreakdown(byCafe)
-  )
-}
-
 // --- Env & format ---
 
 export const REPORT_BASE_URL =
