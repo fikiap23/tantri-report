@@ -6,6 +6,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CollapsiblePlatformFeeCard } from '@/components/report/collapsible-platform-fee-card'
 import { ReportViewToggle } from '@/components/report-view-toggle'
 import {
   ReportScopeType,
@@ -15,6 +16,7 @@ import {
   formatCurrency,
   formatDateForInput,
   formatNumber,
+  getBlockPlatformFeeByCustomer,
   getWalletExpenseAmountByMethod,
   getOrderCountByBlock,
   type SummaryData,
@@ -50,10 +52,6 @@ const DUMMY_FIELDS: DummyField[] = [
   {
     key: 'walletExpense.detailBreakdown',
     requestToBE: 'Breakdown pengeluaran dompet per channel + jumlah transaksi',
-  },
-  {
-    key: 'feeBreakdown.xendit',
-    requestToBE: 'Breakdown Xendit fee per payment method + count transaksi',
   },
 ]
 
@@ -378,7 +376,7 @@ export default function BackofficeDashboardPage() {
         },
         {
           label: 'Platform Fee',
-          value: formatCurrency(data.sales.platformFee || 0),
+          value: formatCurrency(getBlockPlatformFeeByCustomer(data.sales)),
           negative: true,
         },
         {
@@ -415,7 +413,7 @@ export default function BackofficeDashboardPage() {
         },
         {
           label: 'Platform Fee',
-          value: formatCurrency(data.onlineFood.platformFee || 0),
+          value: formatCurrency(getBlockPlatformFeeByCustomer(data.onlineFood)),
           negative: true,
         },
         {
@@ -435,7 +433,7 @@ export default function BackofficeDashboardPage() {
         },
         {
           label: 'Platform Fee',
-          value: formatCurrency(data.compliment.platformFee || 0),
+          value: formatCurrency(getBlockPlatformFeeByCustomer(data.compliment)),
           negative: true,
         },
         {
@@ -454,28 +452,32 @@ export default function BackofficeDashboardPage() {
           value: formatCurrency(report.metrics.grossSalesOnlineFood),
         },
         {
+          label: 'Total Penjualan Kotor City Ledger',
+          value: formatCurrency(report.metrics.grossCityLedger),
+        },
+        {
           label: 'Total Penjualan Kotor Compliment',
           value: formatCurrency(report.metrics.grossCompliment),
         },
         {
-          label: 'Platform Fee',
-          value: formatCurrency(report.metrics.totalPlatformFee, true),
-          negative: true,
-        },
-        {
-          label: 'Platform Fee Compliment',
-          value: formatCurrency(data.compliment.platformFee || 0, true),
+          label: 'Total Tagihan Platform Fee',
+          value: formatCurrency(report.metrics.totalPlatformFeeBilling, true),
           negative: true,
         },
         {
           label: 'Multiprice Fee',
           value: formatCurrency(report.metrics.totalMultipriceFee, true),
           negative: true,
+          details: report.revenueExpandableRows.find(
+            (r) => r.label === 'Multiprice Fee',
+          )?.details,
         },
         {
           label: 'Xendit Fee',
           value: formatCurrency(report.metrics.totalXenditFee, true),
           negative: true,
+          details: report.revenueExpandableRows.find((r) => r.label === 'Xendit Fee')
+            ?.details,
         },
         {
           label: 'Potongan Deposit',
@@ -726,7 +728,7 @@ export default function BackofficeDashboardPage() {
           </Alert>
         )}
 
-        {dashboard && report && (
+        {dashboard && report && data && (
           <>
             <div className="grid gap-3 md:grid-cols-3">
               <section className={CARD_CLASS}>
@@ -812,6 +814,7 @@ export default function BackofficeDashboardPage() {
               />
             </div>
 
+            <CollapsiblePlatformFeeCard data={data} defaultOpen />
             <section className={CARD_CLASS}>
               <h2 className="text-sm font-semibold text-neutral-800">
                 Field Dummy (Perlu Request ke BE)
