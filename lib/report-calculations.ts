@@ -567,8 +567,7 @@ export type ReportMetrics = {
 }
 
 function computeMetrics(data: SummaryData): ReportMetrics {
-  const { sales, onlineFood, cityLedger, compliment, walletIncome, walletExpense } =
-    data
+  const { sales, onlineFood, cityLedger, compliment, walletIncome } = data
 
   const salesPlatformFeeByCustomer = sales.platformFeeByCustomer
   const onlineFoodPlatformFeeByCustomer = onlineFood.platformFeeByCustomer
@@ -658,9 +657,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
   const totalPlatformFee = totalPlatformFeeBilling
 
   const totalMultipriceFee =
-    sales.multipriceFee +
-    onlineFood.multipriceFee +
-    cityLedger.multipriceFee
+    sales.multipriceFee + onlineFood.multipriceFee + cityLedger.multipriceFee
 
   const totalXenditFeeByChannel =
     (sales.xenditFee || 0) +
@@ -726,9 +723,7 @@ function computeMetrics(data: SummaryData): ReportMetrics {
     (walletIncome.manualTransferAmount || 0) +
     (walletIncome.onlineFoodAmount || 0) +
     (walletIncome.cityLedgerAmount || 0) +
-    depositIncomeTotal +
-    settlement
-
+    depositIncomeTotal
   const totalWalletExpense = totalWalletExpenseAmount(data)
 
   return {
