@@ -10,7 +10,7 @@ BE-TS Postgres (wal_level=logical)
   → tunggu initial snapshot
   → mongodb-mps
   → tantri-debezium-production (relay)
-  → tantri-backend-mps (blue)
+  → tantri-backend-mps-go (blue)
   → verifikasi
 ```
 
@@ -24,13 +24,16 @@ Semua path di bawah relatif dari root repo **`gitops/`**.
 | Kafka Connect + CDC scripts | `tantri-kafka-connect/production` |
 | Mongo MPS | `tantri-database/tantri-database-mongodb-mps/production` |
 | Relay | `tantri-debezium/production` |
-| MPS app | `tantri-backend-mps/production/blue` |
+| MPS app | `tantri-backend-mps-go/production/blue` |
 
 **Aturan keras**
 
-- Jangan start **relay** sebelum snapshot Connect selesai.
+- Jangan start **relay** sebelum **semua** topic CDC ada di Kafka (`tantri.cdc.public.Order`, `Cafe`, `WalletsBalance`, dll.) — jangan hanya tunggu Order.
 - Jangan start **MPS** sebelum topic `order-upsert` punya offset > 0.
+- Container MPS production: `tantri-backend-mps-go-blue-production` (bukan `tantri-backend-mps-blue-production`).
 - `TANTRI_JWT_SECRETKEY` di MPS harus sama dengan `JWT_SECRET` di BE-TS.
+- Catch-up cepat: `TANTRI_RELAY_ORDERDEBOUNCE=0s` + resource relay cukup (lihat `tantri-debezium/production`).
+- Update relay saat catch-up masih jalan: ikuti **§D** (jangan reset fresh).
 
 ---
 
@@ -42,7 +45,7 @@ flowchart LR
   connect -->|tantri.cdc.public| kafka[tantri_kafka]
   relay[tantri_debezium_production] -->|consume_cdc| kafka
   relay -->|legacy_topics| kafka
-  mps[tantri_backend_mps_blue] -->|consume_legacy| kafka
+  mps[tantri_backend_mps_go_blue] -->|consume_legacy| kafka
   mps --> mongo[mongodb_mps]
 ```
 
@@ -153,7 +156,8 @@ SQL
 # 4) Register Debezium connector
 ./register-connector.sh
 
-# 5) Tunggu snapshot — auto-exit saat RUNNING + (Order offset > 0 ATAU DB Order kosong)
+# 5) Tunggu snapshot — auto-exit saat RUNNING + SEMUA topic CDC ada
+#    (Order saja tidak cukup — start relay terlalu awal mematikan reader Cafe/Wallets)
 #    DB kosong: topic Order mungkin belum ada; cukup connector+task RUNNING.
 while true; do
   echo "==== $(date) ===="
@@ -203,13 +207,13 @@ docker exec tantri-kafka-production kafka-get-offsets.sh \
 # harus offset total > 0 jika Postgres punya Order; kalau Unknown Topic → ulang step 6b + docker restart tantri-debezium-production
 
 # 8) MPS
-cd ../tantri-backend-mps/production/blue
+cd ../tantri-backend-mps-go/production/blue
 docker compose --env-file .env up -d
 
 # 9) Verifikasi
 curl -s http://localhost:8085/health
 docker logs --tail 30 tantri-debezium-production
-docker logs --tail 30 tantri-backend-mps-blue-production
+docker logs --tail 30 tantri-backend-mps-go-blue-production
 ```
 
 ### B.4 Down lokal (hentikan stack GitOps lokal)
@@ -219,7 +223,7 @@ Dari root `gitops/`. Urutan: app CDC dulu, lalu BE-TS, lalu DB (opsional).
 **A) Stop cepat (container tetap ada, `docker start` bisa lanjut):**
 
 ```bash
-docker stop tantri-backend-mps-blue-production tantri-debezium-production \
+docker stop tantri-backend-mps-go-blue-production tantri-debezium-production \
   tantri-kafka-connect-production tantri-kafka-production \
   tantri-backend-ts-blue-production \
   tantri-database-mongodb-mps-production 2>/dev/null || true
@@ -230,7 +234,7 @@ docker stop tantri-backend-mps-blue-production tantri-debezium-production \
 
 ```bash
 # 1) CDC apps
-cd tantri-backend-mps/production/blue
+cd tantri-backend-mps-go/production/blue
 docker compose --env-file .env down
 
 cd ../../tantri-debezium/production
@@ -400,7 +404,7 @@ docker exec tantri-kafka-production kafka-get-offsets.sh \
 # Stop di sini jika order-upsert masih 0 / Unknown Topic (ulang 6b + restart relay)
 
 # 8) MPS
-cd ../tantri-backend-mps/production/blue
+cd ../tantri-backend-mps-go/production/blue
 docker compose --env-file .env up -d
 
 # 9) Verifikasi
@@ -439,7 +443,124 @@ Kalau ada `DIFF`: tunggu sebentar lalu ulang. Tetap beda → cek relay/MPS logs 
 
 ---
 
-## D. Verifikasi & rollback
+## D. Deploy update relay (tanpa reset — catch-up aman)
+
+Pakai ini kalau relay/MPS **sudah jalan** (termasuk sedang catch-up snapshot) dan kamu hanya mau update:
+
+- image relay (kode Go: retry reader, debounce, dll.)
+- `.env` / resource compose (`ORDERDEBOUNCE`, `MAXCONNS`, CPU/RAM)
+
+**Jangan** jalankan `./reset-cdc-fresh.sh` di sini. Reset menghapus topic CDC/legacy, consumer group, dan Mongo MPS → catch-up ulang dari nol.
+
+Restart / `compose up --force-recreate` **tidak** menghapus offset consumer group. Relay lanjut dari posisi terakhir.
+
+### D.1 Apa yang di-deploy
+
+| Artefak | Path | Perlu recreate container? |
+|---------|------|---------------------------|
+| Image relay | `registry.gitlab.com/tantri-project/tantri-debezium:production` | Ya (pull + up) |
+| Env relay | `gitops/tantri-debezium/production/.env` | Ya |
+| Resource | `gitops/tantri-debezium/production/docker-compose.yml` | Ya |
+| Script reset | `gitops/tantri-kafka-connect/production/reset-cdc-fresh.sh` | Tidak (hanya sync file; **jangan dijalankan** kecuali memang mau wipe) |
+
+Env yang disarankan saat catch-up:
+
+```env
+TANTRI_RELAY_ORDERDEBOUNCE=0s
+TANTRI_POSTGRES_MAXCONNS=40
+```
+
+### D.2 Build & push image (lokal / CI)
+
+Dari monorepo `backend/` (sejajar `gitops/`):
+
+```bash
+cd tantri-debezium
+docker build -t registry.gitlab.com/tantri-project/tantri-debezium:production \
+  -f build/Dockerfile .
+docker push registry.gitlab.com/tantri-project/tantri-debezium:production
+```
+
+Atau pakai pipeline GitLab yang biasa dipakai tim (tag `:production`).
+
+### D.3 Sync GitOps di server
+
+Pastikan server punya commit/file terbaru untuk:
+
+- `gitops/tantri-debezium/production/.env`
+- `gitops/tantri-debezium/production/docker-compose.yml`
+- (opsional) `gitops/tantri-kafka-connect/production/reset-cdc-fresh.sh` — sync saja, jangan run
+
+### D.4 Recreate relay di server
+
+```bash
+cd gitops/tantri-debezium/production
+
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --force-recreate
+```
+
+Cek env masuk:
+
+```bash
+docker exec tantri-debezium-production printenv TANTRI_RELAY_ORDERDEBOUNCE
+# diharapkan: 0s
+```
+
+Kalau setelah recreate group Cafe masih tanpa member:
+
+```bash
+docker restart tantri-debezium-production
+sleep 8
+```
+
+MPS (`tantri-backend-mps-go-blue-production`) **tidak wajib** di-restart kecuali sempat error Mongo / salah nama container.
+
+### D.5 Verifikasi setelah deploy
+
+```bash
+# 1) Semua reader relay hidup (harus ada relay@ di CONSUMER-ID)
+for g in Order Cafe WalletsBalance ProductOrder SplitBill OfficeOnCafe User; do
+  echo "=== $g ==="
+  docker exec tantri-kafka-production kafka-consumer-groups.sh \
+    --bootstrap-server localhost:9092 \
+    --group "tantri-debezium--tantri.cdc.public.$g" --describe 2>/dev/null | head -4
+done
+
+# 2) Legacy Cafe harus naik (kalau sebelumnya 0 karena reader mati)
+docker exec tantri-kafka-production kafka-get-offsets.sh \
+  --bootstrap-server localhost:9092 --topic cafe-upsert
+
+# 3) Lag Order turun (catch-up lanjut, bukan dari 0)
+docker exec tantri-kafka-production kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 \
+  --group 'tantri-debezium--tantri.cdc.public.Order' --describe
+
+# 4) Log bersih
+docker logs --tail 30 tantri-debezium-production
+```
+
+Sukses jika:
+
+- Group Cafe / Wallets / Order punya member `relay@...`
+- `cafe-upsert` offset > 0 dalam beberapa menit
+- `CURRENT-OFFSET` Order **lanjut** dari sebelum recreate (bukan kembali ke 0)
+- Tidak ada error auth Postgres berulang
+
+### D.6 Yang tidak boleh saat catch-up
+
+| Jangan | Akibat |
+|--------|--------|
+| `./reset-cdc-fresh.sh` | Wipe topic + Mongo → ulang 1.8M+ row |
+| Hapus consumer group `tantri-debezium--*` | Offset hilang → replay ulang |
+| Wipe Mongo MPS (`dropDatabase`) | Progress Order/Cafe yang sudah masuk hilang |
+| Start relay sebelum semua topic CDC ada | Reader Cafe/Wallets mati diam-diam (hanya Order hidup) |
+
+Kalau memang perlu wipe penuh (data corrupt / publication rusak), baru pakai §E reset fresh — dan pastikan script yang sudah tunggu **semua** topic CDC.
+
+---
+
+## E. Verifikasi & rollback
 
 ### Checklist sukses
 
@@ -447,16 +568,17 @@ Kalau ada `DIFF`: tunggu sebentar lalu ulang. Tetap beda → cek relay/MPS logs 
 |-----|------------------------|
 | `wal_level` | `logical` |
 | Connector | state `RUNNING`, task `RUNNING` |
-| Topic CDC | `tantri.cdc.public.Order` offset > 0 |
-| Topic legacy | `order-upsert` offset > 0 |
+| Topic CDC | Semua `tantri.cdc.public.*` (Order, Cafe, WalletsBalance, …) ada di broker |
+| Relay consumers | Group `tantri-debezium--tantri.cdc.public.Cafe` (dan Order) punya `CONSUMER-ID` |
+| Topic legacy | `order-upsert` / `cafe-upsert` offset > 0 |
 | Relay | log tanpa error auth Postgres / unknown topic |
-| MPS | `curl http://localhost:8085/health` OK |
+| MPS | `curl http://localhost:8085/health` OK — container `tantri-backend-mps-go-blue-production` |
 | JWT | `TANTRI_JWT_SECRETKEY` = `JWT_SECRET` TS |
 
 ### Rollback cepat (hentikan CDC app, DB TS tetap hidup)
 
 ```bash
-docker stop tantri-backend-mps-blue-production tantri-debezium-production 2>/dev/null || true
+docker stop tantri-backend-mps-go-blue-production tantri-debezium-production 2>/dev/null || true
 docker stop tantri-kafka-connect-production tantri-kafka-production 2>/dev/null || true
 ```
 
@@ -469,7 +591,7 @@ cd gitops/tantri-kafka-connect/production
 ./reset-cdc-fresh.sh
 ```
 
-Wipe connector/slot/publication/topic + Mongo MPS, recreate publication, register connector, tunggu snapshot, buat legacy topics, start relay & MPS. Kafka/Connect tetap dipakai (tidak di-compose-down).
+Wipe connector/slot/publication/topic + Mongo MPS, recreate publication, register connector, tunggu **semua** topic CDC ada, buat legacy topics, start relay & MPS, verifikasi consumer Cafe+Order. Kafka/Connect tetap dipakai (tidak di-compose-down).
 
 Soft reset (tanpa wipe Mongo / drop publication): hapus connector lalu `./register-connector.sh`, atau lokal `make reset-cdc`.
 
@@ -489,7 +611,7 @@ Opsional — hapus container dari compose (script hanya `docker stop`):
 ```bash
 cd gitops/tantri-kafka-connect/production && docker compose down
 cd ../tantri-debezium/production && docker compose --env-file .env down
-cd ../tantri-backend-mps/production/blue && docker compose --env-file .env down
+cd ../tantri-backend-mps-go/production/blue && docker compose --env-file .env down
 cd ../tantri-kafka/production && docker compose down
 ```
 
@@ -507,4 +629,8 @@ Catatan `wal_level`: setelah uninstall masih `logical` di compose. Revert ke `re
 | MPS JWT invalid | Samakan secret dengan TS |
 | Mongo kosong | MPS start terlalu awal — stop MPS, pastikan `order-upsert` > 0, start lagi |
 | Relay `Unknown Topic Or Partition` | Buat topic legacy dulu (§ step 6b), lalu `docker restart tantri-debezium-production` |
+| Hanya group Order punya `CONSUMER-ID`; Cafe/Wallets kosong | Relay start sebelum semua topic CDC ada — `docker restart tantri-debezium-production`; pastikan script tunggu semua `tantri.cdc.public.*` |
+| `cafe-upsert` = 0 padahal CDC Cafe > 0 | Sama: reader Cafe mati — restart relay; cek `kafka-consumer-groups ...Cafe --describe` |
+| Catch-up Order sangat lambat | Set `TANTRI_RELAY_ORDERDEBOUNCE=0s`, naikkan CPU/RAM relay, `TANTRI_POSTGRES_MAXCONNS=40`; deploy via **§D** — **jangan** reset fresh |
+| Container MPS not found | Pakai `tantri-backend-mps-go-blue-production` |
 | `/datadrive` missing (lokal) | Buat path di §B.1 |
